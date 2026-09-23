@@ -1,0 +1,75 @@
+<div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
+  <div class="card-pro table-pro-container mb-3 p-0 p-md-3 animate__animated animate__fadeInUp">
+    <app-table-pro titulo="Consentimientos" subtitulo="Consentimientos informados" btnText="NUEVO"
+      [showAddBtn]="perms.hasPermission('crear_consentimiento')" [loading]="crud.tableLoading()"
+      [data]="crud.resource().data" [meta]="crud.resource().meta"
+      (add)="abrirModal(modalFormulario)" (pageChange)="crud.cambiarPagina($event)" (search)="onSearch($event)">
+      <thead thead class="text-uppercase text-muted border-bottom table-header-erp">
+        <tr>
+          <th class="ps-3 fw-bold border-0">ID</th>
+          <th class="fw-bold border-0">PACIENTE</th>
+          <th class="fw-bold border-0">PLANTILLA</th>
+          <th class="fw-bold border-0 text-center">ESTADO</th>
+          <th class="text-center border-0">ACCIONES</th>
+        </tr>
+      </thead>
+      <tbody tbody>
+        @for (item of crud.resource().data; track item.id_consentimiento) {
+          <tr class="main-row align-middle fila-animada">
+            <td class="ps-3 py-3"><div class="fw-bold text-primary-erp">#{{ item.id_consentimiento }}</div></td>
+            <td>{{ item.nombre_paciente || item.id_paciente }}</td>
+            <td>{{ item.nombre_plantilla || item.id_consentimiento_plantilla }}</td>
+            <td class="text-center"><span class="badge-erp badge-secondary">{{ item.estado }}</span></td>
+            <td class="text-center">
+              <div class="d-flex justify-content-center gap-2">
+                @if (perms.hasPermission('actualizar_consentimiento')) {
+                  <button type="button" class="btn-action-edit" (click)="abrirModal(modalFormulario, item)"><i class="bi bi-pencil-fill"></i></button>
+                }
+                @if (perms.hasPermission('eliminar_consentimiento')) {
+                  <button type="button" class="btn-action-delete" (click)="crud.deleteItem(item.id_consentimiento)"><i class="bi bi-trash3-fill"></i></button>
+                }
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="5" class="text-center py-5 text-muted-erp">Sin consentimientos.</td></tr>
+        }
+      </tbody>
+    </app-table-pro>
+  </div>
+</div>
+
+<ng-template #modalFormulario let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">{{ crud.editingId() ? 'Editar' : 'Nuevo' }} consentimiento</h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="form" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Paciente <span class="req-star">*</span></label>
+        <ng-select class="ng-select-sm" [items]="pacientes()" bindLabel="nombres" bindValue="id_paciente"
+                   formControlName="id_paciente" appendTo="body" [searchable]="true">
+          <ng-template ng-label-tmp let-item="item">{{ item.nombres }} {{ item.apellidos }}</ng-template>
+          <ng-template ng-option-tmp let-item="item">{{ item.nombres }} {{ item.apellidos }}</ng-template>
+        </ng-select>
+        <app-form-error [control]="form.get('id_paciente')"></app-form-error>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Plantilla <span class="req-star">*</span></label>
+        <ng-select class="ng-select-sm" [items]="plantillas()" bindLabel="nombre" bindValue="id_consentimiento_plantilla"
+                   formControlName="id_consentimiento_plantilla" appendTo="body" [searchable]="true"></ng-select>
+        <app-form-error [control]="form.get('id_consentimiento_plantilla')"></app-form-error>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Estado</label>
+        <ng-select class="ng-select-sm" [items]="estados" bindLabel="nombre" bindValue="id"
+                   formControlName="estado" appendTo="body" [clearable]="false"></ng-select>
+      </div>
+    </form>
+  </div>
+  <div class="modal-footer bg-erp border-top-dashed-erp d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">CANCELAR</button>
+    <button type="button" class="btn btn-primary" (click)="guardar()"><i class="bi bi-save me-1"></i> GUARDAR</button>
+  </div>
+</ng-template>

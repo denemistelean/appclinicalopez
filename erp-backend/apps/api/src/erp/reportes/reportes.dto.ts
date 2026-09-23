@@ -1,0 +1,1 @@
+import{IsNumber,IsOptional,IsString}from'class-validator';export class ReporteFiltroDto{@IsOptional()@IsString()desde?:string;@IsOptional()@IsString()hasta?:string;@IsOptional()@IsNumber()id_sede?:number;}

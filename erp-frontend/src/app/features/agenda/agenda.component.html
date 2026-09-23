@@ -1,0 +1,263 @@
+<div class="agenda-wrap">
+  <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
+    <div>
+      <h4 class="mb-1 fw-bold text-erp">Agenda multi-recurso</h4>
+      <div class="text-muted-erp small">Cada cita ocupa profesional, sala y/o equipo a la vez</div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <input type="date" class="form-control form-control-sm" style="width:auto" [formControl]="fechaDia">
+      <button type="button" class="btn btn-soft-neutral btn-sm" (click)="cargarDia()" [disabled]="loading()">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="agenda-layout">
+    <!-- TIMELINE -->
+    <div class="agenda-main card-erp p-3">
+      @if (loading()) {
+        <div class="text-muted-erp py-5 text-center">Cargando agenda…</div>
+      } @else if (!dayData()) {
+        <div class="text-muted-erp py-5 text-center">Seleccione una sede para ver el día</div>
+      } @else {
+        <div class="tl-scroll">
+          <div class="tl">
+            <div class="tl-head">
+              <div></div>
+              <div class="tl-hours">
+                @for (h of horas; track h) {
+                  <span class="tl-hour" [style.left.%]="((h*60 - dayStartMin) / (dayEndMin - dayStartMin)) * 100">{{ h }}:00</span>
+                }
+              </div>
+            </div>
+
+            @for (lane of dayData().lanes; track lane.group) {
+              <div class="tl-group-label">{{ lane.group }}</div>
+              @for (res of lane.items; track res.id) {
+                <div class="tl-row">
+                  <div class="res-label">
+                    <div class="res-name">{{ res.nombre }}</div>
+                    <div class="res-meta">{{ res.rol || res.cap || '' }}</div>
+                  </div>
+                  <div class="tl-track">
+                    @for (c of bloquesPara(res); track c.id_cita) {
+                      <button type="button" class="block"
+                              [style.left.%]="pctLeft(c.hora_inicio)"
+                              [style.width.%]="pctWidth(c.hora_inicio, finBloque(c, res.kind))"
+                              [style.background]="colorCita(c)"
+                              (click)="abrirDetalle(c, modalDetalle)">
+                        <b>{{ c.tratamiento || c.tipo_cita || 'Cita' }}</b>
+                        <span>{{ c.paciente }}</span>
+                        <span class="block-estado">{{ labelEstado(c.estado) }}</span>
+                        @if (res.kind !== 'prof' && c.buffer_minutos > 0) {
+                          <span class="buffer-ext"
+                                [style.width.%]="(c.buffer_minutos / (toMin(finBloque(c, res.kind)) - toMin(c.hora_inicio))) * 100"></span>
+                        }
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- PANEL DERECHA -->
+    <div class="agenda-side">
+      <div class="card-erp p-3 mb-3">
+        <h5 class="fw-bold text-erp mb-1">Nueva cita</h5>
+        <div class="text-muted-erp small mb-2">
+          El tipo de cita define si se exige tratamiento, sala o equipo
+        </div>
+
+        <form [formGroup]="form" class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Tipo de cita <span class="req-star">*</span></label>
+            <ng-select class="ng-select-sm" [items]="tiposCita()" bindLabel="nombre" bindValue="id_tipo_cita"
+                       formControlName="id_tipo_cita" [searchable]="true" appendTo="body"
+                       notFoundText="Sin tipos">
+              <ng-template ng-option-tmp let-item="item">
+                <div>{{ item.nombre }}</div>
+                <small class="text-muted">{{ item.descripcion }}</small>
+              </ng-template>
+            </ng-select>
+            <app-form-error [control]="form.get('id_tipo_cita')"></app-form-error>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Sede <span class="req-star">*</span></label>
+            <ng-select class="ng-select-sm" [items]="sedes()" bindLabel="nombre" bindValue="id_sede"
+                       formControlName="id_sede" [searchable]="true" appendTo="body"></ng-select>
+            <app-form-error [control]="form.get('id_sede')"></app-form-error>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Paciente <span class="req-star">*</span></label>
+            <ng-select class="ng-select-sm" [items]="pacientes()" bindLabel="nombres" bindValue="id_paciente"
+                       formControlName="id_paciente" [searchable]="true" appendTo="body">
+              <ng-template ng-label-tmp let-item="item">{{ labelPaciente(item) }}</ng-template>
+              <ng-template ng-option-tmp let-item="item">{{ labelPaciente(item) }}</ng-template>
+            </ng-select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Especialista / enfermera</label>
+            <ng-select class="ng-select-sm" [items]="personal()" bindValue="id_personal"
+                       formControlName="id_personal" [searchable]="true" [clearable]="true" appendTo="body"
+                       placeholder="Automático si hay disponibilidad">
+              <ng-template ng-label-tmp let-item="item">{{ labelPersonal(item) }}</ng-template>
+              <ng-template ng-option-tmp let-item="item">{{ labelPersonal(item) }}</ng-template>
+            </ng-select>
+          </div>
+          @if (muestraTratamiento()) {
+            <div class="col-12">
+              <label class="form-label">Tratamiento / intervención <span class="req-star">*</span></label>
+              <ng-select class="ng-select-sm" [items]="tratamientos()" bindLabel="nombre" bindValue="id_tratamiento"
+                         formControlName="id_tratamiento" [searchable]="true" appendTo="body"></ng-select>
+            </div>
+          }
+          @if (muestraSala()) {
+            <div class="col-6">
+              <label class="form-label">Sala @if (tipoSel()?.requiere_sala) { <span class="req-star">*</span> }</label>
+              <ng-select class="ng-select-sm" [items]="salas()" bindLabel="nombre" bindValue="id_sala"
+                         formControlName="id_sala" [clearable]="true" appendTo="body"></ng-select>
+            </div>
+          }
+          @if (muestraEquipo()) {
+            <div class="col-6">
+              <label class="form-label">Equipo @if (tipoSel()?.requiere_equipo) { <span class="req-star">*</span> }</label>
+              <ng-select class="ng-select-sm" [items]="equipos()" bindLabel="nombre" bindValue="id_equipo"
+                         formControlName="id_equipo" [clearable]="true" appendTo="body"></ng-select>
+            </div>
+          }
+          <div class="col-6">
+            <label class="form-label">Fecha</label>
+            <input type="date" class="form-control form-control-sm" formControlName="fecha_cita">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Hora</label>
+            <ng-select
+              class="ng-select-sm"
+              [items]="horasSlots"
+              bindLabel="nombre"
+              bindValue="id"
+              formControlName="hora_inicio"
+              [clearable]="false"
+              [searchable]="true"
+              appendTo="body"
+              placeholder="Seleccione hora"
+              notFoundText="Sin horarios">
+            </ng-select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notas / motivo de la visita</label>
+            <textarea class="form-control form-control-sm" rows="2" formControlName="notas"
+                      placeholder="Ej. quiere información sobre toxina, primera visita…"></textarea>
+          </div>
+        </form>
+
+        <div class="d-grid gap-2 mt-3">
+          @if (perms.hasPermission('crear_cita')) {
+            <button type="button" class="btn btn-primary btn-sm" (click)="agendar()">Validar y agendar</button>
+          }
+          <button type="button" class="btn btn-soft-neutral btn-sm" (click)="validar()">Solo validar</button>
+        </div>
+
+        @if (validacion(); as v) {
+          <div class="check-list mt-3">
+            @for (s of v.steps || []; track $index) {
+              <div class="check-item">
+                <span class="check-icon" [class.pass]="s.pass" [class.fail]="!s.pass && !s.soft" [class.info]="s.soft">
+                  {{ s.pass ? '✓' : (s.soft ? '!' : '✕') }}
+                </span>
+                <span>{{ s.msg }}</span>
+              </div>
+            }
+          </div>
+          <div class="result-banner mt-2" [class.ok]="v.ok || v.valida" [class.fail]="!(v.ok || v.valida)">
+            {{ (v.ok || v.valida) ? 'Cita válida' : 'No se pudo agendar. Revise el detalle.' }}
+          </div>
+        }
+
+        @if (sugerencia()) {
+          <div class="suggestion-box mt-2">
+            Próximo horario libre hoy: <b>{{ sugerencia() }}</b>
+            <button type="button" class="btn btn-sm btn-primary ms-2" (click)="usarSugerencia()">Reservar</button>
+          </div>
+        } @else if (validacion() && !(validacion().ok || validacion().valida)) {
+          <button type="button" class="btn btn-sm btn-outline-secondary mt-2 w-100" (click)="agregarEspera()">
+            Agregar a lista de espera
+          </button>
+        }
+      </div>
+
+      <div class="card-erp p-3 mb-3">
+        <h6 class="fw-bold text-erp">Ficha del paciente</h6>
+        @if (paquetes().length) {
+          @for (p of paquetes(); track p.id_paciente_paquete) {
+            <div class="small mb-2">
+              <div>{{ p.paquete }} · {{ p.sesiones_usadas }}/{{ p.sesiones_total }} · {{ p.estado }}</div>
+              <div class="pkg-bar"><div class="pkg-fill" [style.width.%]="(p.sesiones_usadas / p.sesiones_total) * 100"></div></div>
+            </div>
+          }
+        } @else {
+          <div class="text-muted-erp small fst-italic">Sin paquete activo o sin paciente seleccionado.</div>
+        }
+      </div>
+
+      <div class="card-erp p-3">
+        <h6 class="fw-bold text-erp">Lista de espera</h6>
+        @if (!waitlist().length) {
+          <div class="text-muted-erp small fst-italic">Sin pacientes en espera.</div>
+        } @else {
+          @for (w of waitlist(); track w.id_lista_espera) {
+            <div class="wait-item">
+              <span>{{ w.paciente }}</span>
+              <span class="wait-badge">{{ w.tratamiento || '—' }}</span>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #modalDetalle let-modal>
+  @if (citaDetalle(); as c) {
+    <div class="modal-header border-bottom-dashed-erp bg-erp">
+      <h5 class="modal-title fw-bold text-erp">{{ c.tratamiento || c.tipo_cita || 'Cita' }}</h5>
+      <button type="button" class="btn-close" (click)="modal.dismiss()"></button>
+    </div>
+    <div class="modal-body">
+      <div class="mb-1"><b>{{ c.paciente }}</b></div>
+      <div class="text-muted-erp small">{{ c.personal }}</div>
+      <div class="mono small mt-2">{{ c.hora_inicio | slice:0:5 }} – {{ c.hora_fin | slice:0:5 }}
+        @if (c.hora_fin_recurso) { <span>(recurso hasta {{ c.hora_fin_recurso | slice:0:5 }})</span> }
+      </div>
+      <div class="mt-2"><span class="badge-erp">{{ labelEstado(c.estado) }}</span></div>
+      @if (c.participantes?.length) {
+        <div class="mt-3 small">
+          <b>Participantes</b>
+          <ul class="mb-0">
+            @for (p of c.participantes; track p.id_cita_recurso_humano) {
+              <li>{{ p.personal }} @if (p.rol_nombre) { · {{ p.rol_nombre }} } @if (p.es_principal) { (principal) }</li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+    <div class="modal-footer flex-wrap gap-2">
+      @if (puedeIniciar(c)) {
+        <button type="button" class="btn btn-soft-neutral" (click)="cambiarEstadoCita(modal, 'EN_ATENCION')">
+          Iniciar atención
+        </button>
+      }
+      @if (puedeFinalizar(c)) {
+        <button type="button" class="btn btn-primary" (click)="completarCita(modal)">Finalizar</button>
+      }
+      @if (puedeCancelar(c)) {
+        <button type="button" class="btn btn-outline-danger" (click)="cancelarCita(modal)">Cancelar cita</button>
+      }
+      <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">Cerrar</button>
+    </div>
+  }
+</ng-template>

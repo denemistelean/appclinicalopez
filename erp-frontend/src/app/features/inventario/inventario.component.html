@@ -1,0 +1,187 @@
+<div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <div class="card-pro p-3 h-100">
+        <h6 class="fw-bold text-erp mb-2"><i class="bi bi-exclamation-triangle text-warning me-2"></i>Stock bajo</h6>
+        @for (a of alertas().stock_bajo; track a.id_insumo || $index) {
+          <div class="d-flex justify-content-between border-bottom py-2">
+            <span>{{ a.nombre || a.nombre_insumo }}</span>
+            <span class="badge-erp badge-danger">{{ a.stock_actual ?? a.cantidad_actual }} / min {{ a.stock_minimo }}</span>
+          </div>
+        } @empty {
+          <p class="text-muted-erp mb-0 small">Sin alertas de stock.</p>
+        }
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card-pro p-3 h-100">
+        <h6 class="fw-bold text-erp mb-2"><i class="bi bi-calendar-x text-danger me-2"></i>Por vencer</h6>
+        @for (a of alertas().por_vencer; track a.id_lote || $index) {
+          <div class="d-flex justify-content-between border-bottom py-2">
+            <span>{{ a.nombre || a.nombre_insumo }} ({{ a.codigo_lote }})</span>
+            <span class="badge-erp badge-secondary">{{ a.fecha_vencimiento }}</span>
+          </div>
+        } @empty {
+          <p class="text-muted-erp mb-0 small">Sin lotes próximos a vencer.</p>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="card-pro table-pro-container mb-3 p-0 p-md-3 animate__animated animate__fadeInUp">
+    <div class="d-flex justify-content-end gap-2 px-3 pt-3">
+      @if (perms.hasPermission('crear_inventario')) {
+        <button type="button" class="btn btn-soft-neutral" (click)="abrirMovimiento(modalMovimiento)">
+          <i class="bi bi-arrow-left-right me-1"></i> Movimiento
+        </button>
+      }
+    </div>
+    <app-table-pro titulo="Insumos" subtitulo="Inventario y alertas" btnText="NUEVO INSUMO"
+      [showAddBtn]="perms.hasPermission('crear_inventario')" [loading]="crud.tableLoading()"
+      [data]="crud.resource().data" [meta]="crud.resource().meta"
+      (add)="abrirModal(modalFormulario)" (pageChange)="crud.cambiarPagina($event)" (search)="onSearch($event)">
+
+      <thead thead class="text-uppercase text-muted border-bottom table-header-erp">
+        <tr>
+          <th class="ps-3 fw-bold border-0">ID</th>
+          <th class="fw-bold border-0">CÓDIGO</th>
+          <th class="fw-bold border-0">NOMBRE</th>
+          <th class="fw-bold border-0">UNIDAD</th>
+          <th class="fw-bold border-0 text-end">STOCK MÍN.</th>
+          <th class="fw-bold border-0 text-center">ESTADO</th>
+          <th class="text-center border-0">ACCIONES</th>
+        </tr>
+      </thead>
+      <tbody tbody>
+        @for (item of crud.resource().data; track item.id_insumo) {
+          <tr class="main-row align-middle fila-animada">
+            <td class="ps-3 py-3"><div class="fw-bold text-primary-erp">#{{ item.id_insumo }}</div></td>
+            <td>{{ item.codigo || '—' }}</td>
+            <td class="fw-bold text-erp text-uppercase">{{ item.nombre }}</td>
+            <td>{{ item.unidad }}</td>
+            <td class="text-end">{{ item.stock_minimo }}</td>
+            <td class="text-center">
+              <span class="badge-erp" [class.badge-success]="item.estado === 'ACTIVO'">{{ item.estado }}</span>
+            </td>
+            <td class="text-center">
+              <div class="d-flex justify-content-center gap-2">
+                @if (perms.hasPermission('actualizar_inventario')) {
+                  <button type="button" class="btn-action-edit" (click)="abrirModal(modalFormulario, item)">
+                    <i class="bi bi-pencil-fill"></i>
+                  </button>
+                }
+                @if (perms.hasPermission('eliminar_inventario')) {
+                  <button type="button" class="btn-action-delete" (click)="crud.deleteItem(item.id_insumo)">
+                    <i class="bi bi-trash3-fill"></i>
+                  </button>
+                }
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="7" class="text-center py-5 text-muted-erp">No hay insumos.</td></tr>
+        }
+      </tbody>
+    </app-table-pro>
+  </div>
+</div>
+
+<ng-template #modalFormulario let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">
+      <div class="icon-badge me-2"><i class="bi bi-box-seam"></i></div>
+      {{ crud.editingId() ? 'Editar Insumo' : 'Nuevo Insumo' }}
+    </h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="form" class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Código</label>
+        <input type="text" class="form-control" formControlName="codigo">
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Nombre <span class="req-star">*</span></label>
+        <input type="text" class="form-control text-uppercase" formControlName="nombre"
+               oninput="this.value = this.value.toUpperCase()">
+        <app-form-error [control]="form.get('nombre')"></app-form-error>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Descripción</label>
+        <input type="text" class="form-control" formControlName="descripcion">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Unidad</label>
+        <input type="text" class="form-control" formControlName="unidad">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Stock mínimo</label>
+        <input type="number" step="0.01" class="form-control" formControlName="stock_minimo">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Estado</label>
+        <ng-select class="ng-select-sm" [items]="estados" bindLabel="nombre" bindValue="id"
+                   formControlName="estado" appendTo="body" [clearable]="false"></ng-select>
+      </div>
+    </form>
+  </div>
+  <div class="modal-footer bg-erp border-top-dashed-erp d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">CANCELAR</button>
+    <button type="button" class="btn btn-primary" (click)="guardar()"><i class="bi bi-save me-1"></i> GUARDAR</button>
+  </div>
+</ng-template>
+
+<ng-template #modalMovimiento let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">
+      <div class="icon-badge me-2"><i class="bi bi-arrow-left-right"></i></div>
+      Nuevo movimiento
+    </h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="formMov" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Insumo <span class="req-star">*</span></label>
+        <ng-select class="ng-select-sm" [items]="insumos()" bindLabel="nombre" bindValue="id_insumo"
+                   formControlName="id_insumo" placeholder="Buscar..." appendTo="body"
+                   [searchable]="true" [clearable]="true" notFoundText="Sin resultados"></ng-select>
+        <app-form-error [control]="formMov.get('id_insumo')"></app-form-error>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Sede <span class="req-star">*</span></label>
+        <ng-select class="ng-select-sm" [items]="sedes()" bindLabel="nombre" bindValue="id_sede"
+                   formControlName="id_sede" appendTo="body" [searchable]="true" [clearable]="true"></ng-select>
+        <app-form-error [control]="formMov.get('id_sede')"></app-form-error>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Tipo</label>
+        <ng-select class="ng-select-sm" [items]="tiposMov" bindLabel="nombre" bindValue="id"
+                   formControlName="tipo_movimiento" appendTo="body" [clearable]="false"></ng-select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Cantidad <span class="req-star">*</span></label>
+        <input type="number" step="0.01" class="form-control" formControlName="cantidad">
+        <app-form-error [control]="formMov.get('cantidad')"></app-form-error>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Código lote</label>
+        <input type="text" class="form-control" formControlName="codigo_lote">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Vencimiento</label>
+        <input type="date" class="form-control" formControlName="fecha_vencimiento">
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Motivo</label>
+        <input type="text" class="form-control" formControlName="motivo">
+      </div>
+    </form>
+  </div>
+  <div class="modal-footer bg-erp border-top-dashed-erp d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">CANCELAR</button>
+    <button type="button" class="btn btn-primary" (click)="guardarMovimiento()">
+      <i class="bi bi-save me-1"></i> REGISTRAR
+    </button>
+  </div>
+</ng-template>

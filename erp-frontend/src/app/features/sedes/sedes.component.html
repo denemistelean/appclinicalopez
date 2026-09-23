@@ -1,0 +1,217 @@
+<div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
+  <div class="card-pro table-pro-container mb-3 p-0 p-md-3 animate__animated animate__fadeInUp">
+    <app-table-pro titulo="Sedes" subtitulo="Sucursales, salas y equipos" btnText="NUEVA SEDE"
+      [showAddBtn]="perms.hasPermission('crear_sede')" [loading]="crud.tableLoading()"
+      [data]="crud.resource().data" [meta]="crud.resource().meta"
+      (add)="abrirModal(modalFormulario)" (pageChange)="crud.cambiarPagina($event)" (search)="onSearch($event)">
+
+      <thead thead class="text-uppercase text-muted border-bottom table-header-erp">
+        <tr>
+          <th class="ps-3 fw-bold border-0" style="width: 80px;">ID</th>
+          <th class="fw-bold border-0">NOMBRE</th>
+          <th class="fw-bold border-0">CIUDAD</th>
+          <th class="fw-bold border-0">TELÉFONO</th>
+          <th class="fw-bold border-0 text-center">ESTADO</th>
+          <th class="text-center border-0" style="width: 120px;">ACCIONES</th>
+        </tr>
+      </thead>
+      <tbody tbody>
+        @for (item of crud.resource().data; track item.id_sede) {
+          <tr class="main-row align-middle fila-animada">
+            <td class="ps-3 py-3"><div class="fw-bold text-primary-erp">#{{ item.id_sede }}</div></td>
+            <td class="fw-bold text-erp text-uppercase">{{ item.nombre }}</td>
+            <td class="text-muted-erp">{{ item.ciudad || '—' }}</td>
+            <td class="text-muted-erp">{{ item.telefono || '—' }}</td>
+            <td class="text-center">
+              @if (item.estado === 'ACTIVA') {
+                <span class="badge-erp badge-success">ACTIVA</span>
+              } @else {
+                <span class="badge-erp badge-danger">{{ item.estado }}</span>
+              }
+            </td>
+            <td class="text-center">
+              <div class="d-flex justify-content-center gap-2">
+                @if (perms.hasPermission('actualizar_sede')) {
+                  <button type="button" class="btn-action-edit" (click)="abrirModal(modalFormulario, item)">
+                    <i class="bi bi-pencil-fill"></i>
+                  </button>
+                }
+                @if (perms.hasPermission('eliminar_sede')) {
+                  <button type="button" class="btn-action-delete" (click)="crud.deleteItem(item.id_sede)">
+                    <i class="bi bi-trash3-fill"></i>
+                  </button>
+                }
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="6" class="text-center py-5 text-muted-erp">No hay sedes registradas.</td></tr>
+        }
+      </tbody>
+    </app-table-pro>
+  </div>
+</div>
+
+<ng-template #modalFormulario let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">
+      <div class="icon-badge me-2"><i class="bi bi-building"></i></div>
+      {{ crud.editingId() ? 'Editar Sede' : 'Nueva Sede' }}
+    </h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+
+  <div class="modal-body p-4 bg-card">
+    @if (crud.editingId()) {
+      <app-erp-tabs [tabs]="tabs" [activeTab]="activeTab()" (tabChange)="onTabChange($event)"></app-erp-tabs>
+    }
+
+    @if (activeTab() === 'datos' || !crud.editingId()) {
+      <form [formGroup]="form" class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Nombre <span class="req-star">*</span></label>
+          <input type="text" class="form-control text-uppercase" formControlName="nombre"
+                 oninput="this.value = this.value.toUpperCase()">
+          <app-form-error [control]="form.get('nombre')"></app-form-error>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Razón social</label>
+          <input type="text" class="form-control" formControlName="razon_social">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Dirección</label>
+          <input type="text" class="form-control" formControlName="direccion">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Estado <span class="req-star">*</span></label>
+          <ng-select class="ng-select-sm" [items]="estadosSede" bindLabel="nombre" bindValue="id"
+                     formControlName="estado" appendTo="body" [searchable]="true" [clearable]="false">
+          </ng-select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Ciudad</label>
+          <input type="text" class="form-control" formControlName="ciudad">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Distrito</label>
+          <input type="text" class="form-control" formControlName="distrito">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Teléfono</label>
+          <input type="text" class="form-control" formControlName="telefono">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Email de contacto</label>
+          <input type="email" class="form-control" formControlName="email_contacto">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Apertura</label>
+          <input type="time" class="form-control" formControlName="horario_apertura">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Cierre</label>
+          <input type="time" class="form-control" formControlName="horario_cierre">
+        </div>
+      </form>
+    }
+
+    @if (crud.editingId() && activeTab() === 'salas') {
+      <form [formGroup]="formSala" class="row g-2 align-items-end mb-3">
+        <div class="col-md-4">
+          <label class="form-label">Nombre sala <span class="req-star">*</span></label>
+          <input type="text" class="form-control" formControlName="nombre">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Capacidad / equipo</label>
+          <input type="text" class="form-control" formControlName="capacidad_equipo">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Estado</label>
+          <ng-select class="ng-select-sm" [items]="estadosSala" bindLabel="nombre" bindValue="id"
+                     formControlName="estado" appendTo="body" [clearable]="false"></ng-select>
+        </div>
+        <div class="col-md-2">
+          <button type="button" class="btn btn-primary w-100" (click)="agregarSala()">
+            <i class="bi bi-plus-lg"></i> Agregar
+          </button>
+        </div>
+      </form>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Nombre</th><th>Capacidad</th><th>Estado</th><th></th></tr></thead>
+          <tbody>
+            @for (s of salas(); track s.id_sala) {
+              <tr>
+                <td>{{ s.nombre }}</td>
+                <td>{{ s.capacidad_equipo || '—' }}</td>
+                <td>{{ s.estado }}</td>
+                <td class="text-end">
+                  <button type="button" class="btn-action-delete" (click)="eliminarSala(s.id_sala)">
+                    <i class="bi bi-trash3-fill"></i>
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="4" class="text-muted text-center py-3">Sin salas</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    @if (crud.editingId() && activeTab() === 'equipos') {
+      <form [formGroup]="formEquipo" class="row g-2 align-items-end mb-3">
+        <div class="col-md-3">
+          <label class="form-label">Nombre <span class="req-star">*</span></label>
+          <input type="text" class="form-control" formControlName="nombre">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Tipo de equipo</label>
+          <ng-select class="ng-select-sm" [items]="tiposEquipo()" bindLabel="nombre" bindValue="id_tipo_equipo"
+                     formControlName="id_tipo_equipo" placeholder="Buscar..." appendTo="body"
+                     [searchable]="true" [clearable]="true" notFoundText="Sin resultados"></ng-select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">N° serie</label>
+          <input type="text" class="form-control" formControlName="numero_serie">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Estado</label>
+          <ng-select class="ng-select-sm" [items]="estadosEquipo" bindLabel="nombre" bindValue="id"
+                     formControlName="estado" appendTo="body" [clearable]="false"></ng-select>
+        </div>
+        <div class="col-md-2">
+          <button type="button" class="btn btn-primary w-100" (click)="agregarEquipo()">
+            <i class="bi bi-plus-lg"></i> Agregar
+          </button>
+        </div>
+      </form>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Nombre</th><th>Tipo</th><th>Serie</th><th>Estado</th></tr></thead>
+          <tbody>
+            @for (e of equipos(); track e.id_equipo) {
+              <tr>
+                <td>{{ e.nombre }}</td>
+                <td>{{ e.tipo || e.nombre_tipo || '—' }}</td>
+                <td>{{ e.numero_serie || '—' }}</td>
+                <td>{{ e.estado }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="4" class="text-muted text-center py-3">Sin equipos</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <div class="modal-footer bg-erp border-top-dashed-erp d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">CANCELAR</button>
+    @if (activeTab() === 'datos' || !crud.editingId()) {
+      <button type="button" class="btn btn-primary" (click)="guardar()">
+        <i class="bi bi-save me-1"></i> GUARDAR
+      </button>
+    }
+  </div>
+</ng-template>

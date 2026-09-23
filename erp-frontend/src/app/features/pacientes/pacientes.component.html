@@ -1,0 +1,119 @@
+<div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
+  <div class="card-pro table-pro-container mb-3 p-0 p-md-3 animate__animated animate__fadeInUp">
+    <app-table-pro titulo="Pacientes" subtitulo="Fichas demográficas" btnText="NUEVO PACIENTE"
+      searchPlaceholder="Buscar por DNI, nombre o apellido..."
+      [showAddBtn]="perms.hasPermission('crear_paciente')" [loading]="crud.tableLoading()"
+      [data]="crud.resource().data" [meta]="crud.resource().meta"
+      (add)="abrirModal(modalFormulario)" (pageChange)="crud.cambiarPagina($event)" (search)="onSearch($event)">
+
+      <thead thead class="text-uppercase text-muted border-bottom table-header-erp">
+        <tr>
+          <th class="ps-3 fw-bold border-0">ID</th>
+          <th class="fw-bold border-0">DOCUMENTO</th>
+          <th class="fw-bold border-0">PACIENTE</th>
+          <th class="fw-bold border-0">TELÉFONO</th>
+          <th class="fw-bold border-0 text-center">ESTADO</th>
+          <th class="text-center border-0">ACCIONES</th>
+        </tr>
+      </thead>
+      <tbody tbody>
+        @for (item of crud.resource().data; track item.id_paciente) {
+          <tr class="main-row align-middle fila-animada">
+            <td class="ps-3 py-3"><div class="fw-bold text-primary-erp">#{{ item.id_paciente }}</div></td>
+            <td>{{ item.numero_documento }}</td>
+            <td class="fw-bold text-erp text-uppercase">{{ item.nombres }} {{ item.apellidos }}</td>
+            <td class="text-muted-erp">{{ item.telefono || '—' }}</td>
+            <td class="text-center">
+              <span class="badge-erp" [class.badge-success]="item.estado === 'ACTIVO'">{{ item.estado }}</span>
+            </td>
+            <td class="text-center">
+              <div class="d-flex justify-content-center gap-2">
+                <button type="button" class="btn-action-edit" title="Ficha" (click)="verFicha(item.id_paciente)">
+                  <i class="bi bi-folder2-open"></i>
+                </button>
+                @if (perms.hasPermission('actualizar_paciente')) {
+                  <button type="button" class="btn-action-edit" (click)="abrirModal(modalFormulario, item)">
+                    <i class="bi bi-pencil-fill"></i>
+                  </button>
+                }
+                @if (perms.hasPermission('eliminar_paciente')) {
+                  <button type="button" class="btn-action-delete" (click)="crud.deleteItem(item.id_paciente)">
+                    <i class="bi bi-trash3-fill"></i>
+                  </button>
+                }
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="6" class="text-center py-5 text-muted-erp">No hay pacientes.</td></tr>
+        }
+      </tbody>
+    </app-table-pro>
+  </div>
+</div>
+
+<ng-template #modalFormulario let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">
+      <div class="icon-badge me-2"><i class="bi bi-person-vcard"></i></div>
+      {{ crud.editingId() ? 'Editar Paciente' : 'Nuevo Paciente' }}
+    </h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="form" class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Tipo doc.</label>
+        <input type="text" class="form-control" formControlName="tipo_documento">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">N° documento <span class="req-star">*</span></label>
+        <input type="text" class="form-control" formControlName="numero_documento">
+        <app-form-error [control]="form.get('numero_documento')"></app-form-error>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Nombres <span class="req-star">*</span></label>
+        <input type="text" class="form-control text-uppercase" formControlName="nombres"
+               oninput="this.value = this.value.toUpperCase()">
+        <app-form-error [control]="form.get('nombres')"></app-form-error>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Apellidos <span class="req-star">*</span></label>
+        <input type="text" class="form-control text-uppercase" formControlName="apellidos"
+               oninput="this.value = this.value.toUpperCase()">
+        <app-form-error [control]="form.get('apellidos')"></app-form-error>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Fecha nacimiento</label>
+        <input type="date" class="form-control" formControlName="fecha_nacimiento">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Sexo</label>
+        <ng-select class="ng-select-sm" [items]="sexos" bindLabel="nombre" bindValue="id"
+                   formControlName="sexo" appendTo="body" [clearable]="true"></ng-select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Teléfono</label>
+        <input type="text" class="form-control" formControlName="telefono">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" formControlName="email">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Dirección</label>
+        <input type="text" class="form-control" formControlName="direccion">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Observaciones</label>
+        <textarea class="form-control" rows="2" formControlName="observaciones"></textarea>
+      </div>
+    </form>
+  </div>
+  <div class="modal-footer bg-erp border-top-dashed-erp d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">CANCELAR</button>
+    <button type="button" class="btn btn-primary" (click)="guardar()">
+      <i class="bi bi-save me-1"></i> GUARDAR
+    </button>
+  </div>
+</ng-template>

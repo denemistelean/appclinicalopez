@@ -1,0 +1,141 @@
+<div class="container-fluid p-3 p-md-4 mapa-wrap mx-auto">
+  <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+    <div>
+      <h4 class="erp-title-section mb-1">Mapa corporal 3D</h4>
+      <p class="text-muted-erp small mb-0">
+        Gira el modelo, elige un marcador anatómico o inserta un punto en la superficie para planificar y seguir intervenciones.
+      </p>
+    </div>
+    <div style="min-width:320px;max-width:420px;flex:1;">
+      <form [formGroup]="formPac">
+        <label class="form-label">Paciente <span class="req-star">*</span></label>
+        <ng-select class="ng-select-sm" [items]="pacientes()" bindLabel="label" bindValue="id_paciente"
+                   formControlName="id_paciente" [searchable]="true" appendTo="body"
+                   [typeahead]="pacTypeahead$" [minTermLength]="2" [loading]="pacientesLoading()"
+                   placeholder="DNI, nombre o apellido..." notFoundText="Escriba al menos 2 caracteres">
+        </ng-select>
+      </form>
+    </div>
+  </div>
+
+  <div class="mapa-layout">
+    <div class="card-pro p-3">
+      <h6 class="erp-title-section mb-3">Controles</h6>
+      <button type="button" class="btn btn-soft-neutral w-100 mb-2" (click)="resetView()">Restablecer vista</button>
+      <button type="button" class="btn w-100 mb-2"
+              [class.btn-primary]="autoRotate()" [class.btn-soft-neutral]="!autoRotate()"
+              (click)="toggleAutoRotate()">
+        {{ autoRotate() ? 'Detener auto-rotación' : 'Activar auto-rotación' }}
+      </button>
+      <button type="button" class="btn w-100 mb-2"
+              [class.btn-primary]="hideEmpty()" [class.btn-soft-neutral]="!hideEmpty()"
+              (click)="toggleEmpty()">
+        {{ hideEmpty() ? 'Mostrar todos los marcadores' : 'Ocultar marcadores sin registro' }}
+      </button>
+      @if (perms.hasPermission('crear_mapa_marcador')) {
+        <button type="button" class="btn w-100 mb-3"
+                [class.btn-primary]="modoInsertar()" [class.btn-soft-neutral]="!modoInsertar()"
+                (click)="setModoInsertar(!modoInsertar())">
+          {{ modoInsertar() ? 'Modo: insertar punto (clic en el cuerpo)' : 'Insertar marcador en la malla' }}
+        </button>
+      }
+      <div class="mapa-hint mb-2">
+        <span class="dot dot-reg me-1"></span> Con registro<br>
+        <span class="dot dot-sel me-1"></span> Seleccionado<br>
+        <span class="dot dot-empty me-1"></span> Sin registro
+      </div>
+      <p class="mapa-hint mb-0">Modelo: <code>src/assets/models/cuerpo.glb</code></p>
+    </div>
+
+    <div class="card-pro p-2 mapa-canvas-card">
+      @if (loadingModel()) {
+        <div class="mapa-overlay">
+          <div class="spinner-border spinner-border-sm"></div>
+          <div>Cargando modelo 3D…</div>
+        </div>
+      }
+      @if (modelError()) {
+        <div class="mapa-overlay text-danger px-3 text-center">{{ modelError() }}</div>
+      }
+      <div #canvasHost class="mapa-canvas"></div>
+      <p class="mapa-hint text-center mt-2 mb-1">Arrastra para rotar · rueda para zoom</p>
+    </div>
+
+    <div class="card-pro p-3">
+      <h6 class="erp-title-section mb-2">Detalle de zona</h6>
+      @if (!selectedCodigo()) {
+        <p class="text-muted-erp small mb-0">
+          Haz clic en un marcador. Con “Insertar marcador” activo, un clic en la piel crea un punto nuevo.
+        </p>
+      } @else {
+        <form [formGroup]="formZona" class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Zona</label>
+            <input type="text" class="form-control form-control-sm" formControlName="zona_label">
+            <div class="form-text">{{ formZona.value.lado }} · {{ formZona.value.zona_codigo }}</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Procedimiento <span class="req-star">*</span></label>
+            <ng-select class="ng-select-sm" [items]="procedimientos" bindLabel="nombre" bindValue="id"
+                       formControlName="procedimiento" appendTo="body" [searchable]="true"
+                       placeholder="Seleccione..." notFoundText="Sin resultados"></ng-select>
+            <app-form-error [control]="formZona.get('procedimiento')"></app-form-error>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Estado</label>
+            <ng-select class="ng-select-sm" [items]="estados" bindLabel="nombre" bindValue="id"
+                       formControlName="estado" appendTo="body" [clearable]="false"></ng-select>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Fecha</label>
+            <input type="date" class="form-control form-control-sm" formControlName="fecha_plan">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notas clínicas</label>
+            <textarea class="form-control form-control-sm" rows="3" formControlName="notas"></textarea>
+          </div>
+          <div class="col-12">
+            <button type="button" class="btn btn-primary w-100" (click)="guardarZona()">Guardar registro de esta zona</button>
+          </div>
+          @if (formZona.value.id_mapa_marcador && perms.hasPermission('eliminar_mapa_marcador')) {
+            <div class="col-12">
+              <button type="button" class="btn btn-soft-neutral w-100" (click)="quitarZona()">Quitar registro</button>
+            </div>
+          }
+        </form>
+      }
+    </div>
+  </div>
+
+  <div class="card-pro p-3 mt-3">
+    <h6 class="erp-title-section mb-3">Ficha acumulada del paciente</h6>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead class="text-uppercase text-muted table-header-erp">
+          <tr>
+            <th>Zona</th>
+            <th>Lado</th>
+            <th>Procedimiento</th>
+            <th>Estado</th>
+            <th>Fecha</th>
+            <th>Notas</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of registros(); track r.id_mapa_marcador) {
+            <tr class="cursor-pointer" (click)="selectMarker(r.zona_codigo)">
+              <td>{{ r.zona_label }}</td>
+              <td>{{ r.lado }}</td>
+              <td>{{ r.procedimiento }}</td>
+              <td><span class="badge-erp badge-secondary">{{ estadoLabel(r.estado) }}</span></td>
+              <td>{{ r.fecha_plan || '—' }}</td>
+              <td class="small">{{ r.notas || '—' }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="text-center py-4 text-muted-erp">Aún no hay registros. Selecciona un paciente y un punto.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,462 @@
+<div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <a routerLink="/pacientes" class="text-muted-erp small"><i class="bi bi-arrow-left me-1"></i> Volver al listado</a>
+      <h4 class="fw-bold text-erp mb-0 mt-1">
+        {{ paciente()?.nombres }} {{ paciente()?.apellidos }}
+        <span class="text-muted-erp fw-normal fs-6">· {{ paciente()?.numero_documento }}</span>
+      </h4>
+    </div>
+    @if (historiaResumen()?.alergias?.length) {
+      <span class="badge-erp badge-danger">Alergias: {{ historiaResumen()?.alergias?.length }}</span>
+    }
+  </div>
+
+  <div class="card-pro p-3 p-md-4">
+    <app-erp-tabs [tabs]="tabs" [activeTab]="activeTab()" (tabChange)="onTabChange($event)"></app-erp-tabs>
+
+    @if (activeTab() === 'datos') {
+      <form [formGroup]="form" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">N° documento <span class="req-star">*</span></label>
+          <input type="text" class="form-control" formControlName="numero_documento">
+          <app-form-error [control]="form.get('numero_documento')"></app-form-error>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Nombres <span class="req-star">*</span></label>
+          <input type="text" class="form-control text-uppercase" formControlName="nombres">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Apellidos <span class="req-star">*</span></label>
+          <input type="text" class="form-control text-uppercase" formControlName="apellidos">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Sexo</label>
+          <ng-select class="ng-select-sm" [items]="sexos" bindLabel="nombre" bindValue="id"
+                     formControlName="sexo" [clearable]="true" appendTo="body"></ng-select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Teléfono</label>
+          <input type="text" class="form-control" formControlName="telefono">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-control" formControlName="email">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Fecha nacimiento</label>
+          <input type="date" class="form-control" formControlName="fecha_nacimiento">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Dirección</label>
+          <input type="text" class="form-control" formControlName="direccion">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control" rows="2" formControlName="observaciones"></textarea>
+        </div>
+        @if (perms.hasPermission('actualizar_paciente')) {
+          <div class="col-12">
+            <button type="button" class="btn btn-primary" (click)="guardarDatos()">
+              <i class="bi bi-save me-1"></i> Guardar datos
+            </button>
+          </div>
+        }
+      </form>
+    }
+
+    @if (activeTab() === 'historia') {
+      <div class="hp-layout">
+        <div class="hp-nav">
+          @for (s of secciones; track s.id) {
+            <button type="button" class="hp-nav-btn" [class.active]="histSec() === s.id" (click)="setHistSec(s.id)">
+              {{ s.titulo }}
+              <span class="hp-count">{{ itemsDe(s.id).length }}</span>
+            </button>
+          }
+        </div>
+
+        <div class="hp-panel">
+          <!-- MEDIDAS -->
+          @if (histSec() === 'medidas') {
+            @if (historiaResumen()?.ultima_medida; as m) {
+              <div class="hp-last">
+                <b>Última medida:</b>
+                Peso {{ m.peso_kg ?? '—' }} kg · Talla {{ m.talla_cm ?? '—' }} cm ·
+                IMC {{ m.imc ?? '—' }} · % grasa {{ m.porcentaje_grasa ?? '—' }}
+                <span class="text-muted-erp small ms-1">({{ m.fecha_medida }})</span>
+              </div>
+            }
+            <form [formGroup]="formMedida" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3">
+                <label class="form-label">Fecha</label>
+                <input type="datetime-local" class="form-control form-control-sm" formControlName="fecha_medida">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Peso (kg)</label>
+                <input type="number" step="0.1" class="form-control form-control-sm" formControlName="peso_kg">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Estatura (cm)</label>
+                <input type="number" step="0.1" class="form-control form-control-sm" formControlName="talla_cm">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">IMC</label>
+                <input type="text" class="form-control form-control-sm" [value]="imcPreview()" readonly>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">% grasa</label>
+                <input type="number" step="0.1" class="form-control form-control-sm" formControlName="porcentaje_grasa">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Obs.</label>
+                <input type="text" class="form-control form-control-sm" formControlName="observaciones">
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('medidas')">Agregar</button>
+              </div>
+            </form>
+            <table class="table table-sm align-middle">
+              <thead><tr><th>Fecha</th><th>Peso</th><th>Talla</th><th>IMC</th><th>%grasa</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('medidas'); track x.id_paciente_medida) {
+                  <tr>
+                    <td>{{ x.fecha_medida }}</td>
+                    <td>{{ x.peso_kg }}</td>
+                    <td>{{ x.talla_cm }}</td>
+                    <td>{{ x.imc }}</td>
+                    <td>{{ x.porcentaje_grasa ?? '—' }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('medidas', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="6" class="text-muted text-center py-3">Sin medidas</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- VITALES -->
+          @if (histSec() === 'vitales') {
+            @if (historiaResumen()?.ultimos_vitales; as v) {
+              <div class="hp-last">
+                <b>Últimos vitales:</b>
+                T° {{ v.temperatura_c ?? '—' }} · SatO₂ {{ v.saturacion_o2 ?? '—' }}% ·
+                FR {{ v.frecuencia_respiratoria ?? '—' }} · FC {{ v.frecuencia_cardiaca ?? '—' }} ·
+                PA {{ v.presion_sistolica ?? '—' }}/{{ v.presion_diastolica ?? '—' }}
+              </div>
+            }
+            <form [formGroup]="formVital" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3"><label class="form-label">Fecha</label><input type="datetime-local" class="form-control form-control-sm" formControlName="fecha_registro"></div>
+              <div class="col-md-2"><label class="form-label">T° (°C)</label><input type="number" step="0.1" class="form-control form-control-sm" formControlName="temperatura_c"></div>
+              <div class="col-md-2"><label class="form-label">Sat O₂ (%)</label><input type="number" step="0.1" class="form-control form-control-sm" formControlName="saturacion_o2"></div>
+              <div class="col-md-2"><label class="form-label">F. resp.</label><input type="number" class="form-control form-control-sm" formControlName="frecuencia_respiratoria"></div>
+              <div class="col-md-2"><label class="form-label">F. cardíaca</label><input type="number" class="form-control form-control-sm" formControlName="frecuencia_cardiaca"></div>
+              <div class="col-md-2"><label class="form-label">PA sist.</label><input type="number" class="form-control form-control-sm" formControlName="presion_sistolica"></div>
+              <div class="col-md-2"><label class="form-label">PA diast.</label><input type="number" class="form-control form-control-sm" formControlName="presion_diastolica"></div>
+              <div class="col-md-3"><label class="form-label">Obs.</label><input type="text" class="form-control form-control-sm" formControlName="observaciones"></div>
+              <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('vitales')">Agregar</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Fecha</th><th>T°</th><th>Sat</th><th>FR</th><th>FC</th><th>PA</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('vitales'); track x.id_paciente_funcion_vital) {
+                  <tr>
+                    <td>{{ x.fecha_registro }}</td>
+                    <td>{{ x.temperatura_c }}</td>
+                    <td>{{ x.saturacion_o2 }}</td>
+                    <td>{{ x.frecuencia_respiratoria }}</td>
+                    <td>{{ x.frecuencia_cardiaca }}</td>
+                    <td>{{ x.presion_sistolica }}/{{ x.presion_diastolica }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('vitales', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="7" class="text-muted text-center py-3">Sin vitales</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- VACUNAS -->
+          @if (histSec() === 'vacunas') {
+            <form [formGroup]="formVacuna" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3"><label class="form-label">Vacuna *</label><input class="form-control form-control-sm" formControlName="nombre_vacuna"></div>
+              <div class="col-md-2"><label class="form-label">Dosis</label><input class="form-control form-control-sm" formControlName="dosis"></div>
+              <div class="col-md-2"><label class="form-label">Fecha</label><input type="date" class="form-control form-control-sm" formControlName="fecha_aplicacion"></div>
+              <div class="col-md-2"><label class="form-label">Próxima</label><input type="date" class="form-control form-control-sm" formControlName="proxima_dosis"></div>
+              <div class="col-md-2"><label class="form-label">Lote</label><input class="form-control form-control-sm" formControlName="lote"></div>
+              <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('vacunas')">Agregar</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Vacuna</th><th>Dosis</th><th>Fecha</th><th>Próxima</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('vacunas'); track x.id_paciente_vacuna) {
+                  <tr>
+                    <td>{{ x.nombre_vacuna }}</td><td>{{ x.dosis || '—' }}</td>
+                    <td>{{ x.fecha_aplicacion || '—' }}</td><td>{{ x.proxima_dosis || '—' }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('vacunas', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="5" class="text-muted text-center py-3">Sin vacunas</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- PATOLOGICOS -->
+          @if (histSec() === 'patologicos') {
+            <form [formGroup]="formPatologico" class="row g-2 align-items-end mb-3">
+              <div class="col-md-4"><label class="form-label">Antecedente *</label><input class="form-control form-control-sm" formControlName="diagnostico"></div>
+              <div class="col-md-2"><label class="form-label">CIE-10</label><input class="form-control form-control-sm" formControlName="codigo_cie10"></div>
+              <div class="col-md-2"><label class="form-label">Fecha</label><input type="date" class="form-control form-control-sm" formControlName="fecha_diagnostico"></div>
+              <div class="col-md-3"><label class="form-label">Obs.</label><input class="form-control form-control-sm" formControlName="observaciones"></div>
+              <div class="col-md-1"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('patologicos')">+</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Diagnóstico</th><th>CIE-10</th><th>Fecha</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('patologicos'); track x.id_paciente_antecedente_patologico) {
+                  <tr>
+                    <td>{{ x.diagnostico }}</td><td>{{ x.codigo_cie10 || '—' }}</td><td>{{ x.fecha_diagnostico || '—' }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('patologicos', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="4" class="text-muted text-center py-3">Sin antecedentes</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- PERSONALES -->
+          @if (histSec() === 'personales') {
+            <form [formGroup]="formPersonal" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3">
+                <label class="form-label">Tipo *</label>
+                <ng-select class="ng-select-sm" [items]="tiposPersonal" bindLabel="nombre" bindValue="id"
+                           formControlName="tipo" appendTo="body" [clearable]="false"></ng-select>
+              </div>
+              <div class="col-md-6"><label class="form-label">Descripción *</label><input class="form-control form-control-sm" formControlName="descripcion"></div>
+              <div class="col-md-2"><label class="form-label">Obs.</label><input class="form-control form-control-sm" formControlName="observaciones"></div>
+              <div class="col-md-1"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('personales')">+</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Tipo</th><th>Descripción</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('personales'); track x.id_paciente_antecedente_personal) {
+                  <tr>
+                    <td>{{ x.tipo }}</td><td>{{ x.descripcion }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('personales', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="3" class="text-muted text-center py-3">Sin antecedentes</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- QUIRURGICOS -->
+          @if (histSec() === 'quirurgicos') {
+            <form [formGroup]="formQuirurgico" class="row g-2 align-items-end mb-3">
+              <div class="col-md-4"><label class="form-label">Procedimiento *</label><input class="form-control form-control-sm" formControlName="procedimiento"></div>
+              <div class="col-md-2"><label class="form-label">Fecha</label><input type="date" class="form-control form-control-sm" formControlName="fecha_cirugia"></div>
+              <div class="col-md-3"><label class="form-label">Institución</label><input class="form-control form-control-sm" formControlName="institucion"></div>
+              <div class="col-md-2"><label class="form-label">Obs.</label><input class="form-control form-control-sm" formControlName="observaciones"></div>
+              <div class="col-md-1"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('quirurgicos')">+</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Procedimiento</th><th>Fecha</th><th>Institución</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('quirurgicos'); track x.id_paciente_antecedente_quirurgico) {
+                  <tr>
+                    <td>{{ x.procedimiento }}</td><td>{{ x.fecha_cirugia || '—' }}</td><td>{{ x.institucion || '—' }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('quirurgicos', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="4" class="text-muted text-center py-3">Sin antecedentes</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- FAMILIARES -->
+          @if (histSec() === 'familiares') {
+            <form [formGroup]="formFamiliar" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3"><label class="form-label">Parentesco *</label><input class="form-control form-control-sm" formControlName="parentesco" placeholder="Madre, padre…"></div>
+              <div class="col-md-5"><label class="form-label">Diagnóstico *</label><input class="form-control form-control-sm" formControlName="diagnostico"></div>
+              <div class="col-md-3"><label class="form-label">Obs.</label><input class="form-control form-control-sm" formControlName="observaciones"></div>
+              <div class="col-md-1"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('familiares')">+</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Parentesco</th><th>Diagnóstico</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('familiares'); track x.id_paciente_antecedente_familiar) {
+                  <tr>
+                    <td>{{ x.parentesco }}</td><td>{{ x.diagnostico }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('familiares', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="3" class="text-muted text-center py-3">Sin antecedentes</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- ALERGIAS -->
+          @if (histSec() === 'alergias') {
+            <form [formGroup]="formAlergia" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3"><label class="form-label">Sustancia *</label><input class="form-control form-control-sm" formControlName="sustancia"></div>
+              <div class="col-md-2">
+                <label class="form-label">Tipo</label>
+                <ng-select class="ng-select-sm" [items]="tiposAlergia" bindLabel="nombre" bindValue="id"
+                           formControlName="tipo" appendTo="body" [clearable]="false"></ng-select>
+              </div>
+              <div class="col-md-3"><label class="form-label">Reacción</label><input class="form-control form-control-sm" formControlName="reaccion"></div>
+              <div class="col-md-2">
+                <label class="form-label">Severidad</label>
+                <ng-select class="ng-select-sm" [items]="severidades" bindLabel="nombre" bindValue="id"
+                           formControlName="severidad" appendTo="body" [clearable]="false"></ng-select>
+              </div>
+              <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('alergias')">Agregar</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Sustancia</th><th>Tipo</th><th>Reacción</th><th>Severidad</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('alergias'); track x.id_paciente_alergia_ram) {
+                  <tr>
+                    <td>{{ x.sustancia }}</td><td>{{ x.tipo }}</td><td>{{ x.reaccion || '—' }}</td><td>{{ x.severidad }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('alergias', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="5" class="text-muted text-center py-3">Sin alergias</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- MEDICACION -->
+          @if (histSec() === 'medicaciones') {
+            <form [formGroup]="formMedicacion" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3"><label class="form-label">Medicamento *</label><input class="form-control form-control-sm" formControlName="medicamento"></div>
+              <div class="col-md-2"><label class="form-label">Dosis</label><input class="form-control form-control-sm" formControlName="dosis"></div>
+              <div class="col-md-2"><label class="form-label">Frecuencia</label><input class="form-control form-control-sm" formControlName="frecuencia"></div>
+              <div class="col-md-2"><label class="form-label">Vía</label><input class="form-control form-control-sm" formControlName="via"></div>
+              <div class="col-md-2"><label class="form-label">Inicio</label><input type="date" class="form-control form-control-sm" formControlName="fecha_inicio"></div>
+              <div class="col-md-1"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('medicaciones')">+</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Medicamento</th><th>Dosis</th><th>Frecuencia</th><th>Vía</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('medicaciones'); track x.id_paciente_medicacion_habitual) {
+                  <tr>
+                    <td>{{ x.medicamento }}</td><td>{{ x.dosis || '—' }}</td><td>{{ x.frecuencia || '—' }}</td><td>{{ x.via || '—' }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('medicaciones', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="5" class="text-muted text-center py-3">Sin medicación</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- GINECO -->
+          @if (histSec() === 'gineco') {
+            <form [formGroup]="formGineco" class="row g-2 align-items-end mb-3">
+              <div class="col-md-4"><label class="form-label">Descripción</label><input class="form-control form-control-sm" formControlName="descripcion" placeholder="Resumen / nota"></div>
+              <div class="col-md-2"><label class="form-label">Menarquia</label><input type="number" class="form-control form-control-sm" formControlName="menarquia_edad"></div>
+              <div class="col-md-2"><label class="form-label">FUR</label><input type="date" class="form-control form-control-sm" formControlName="fur"></div>
+              <div class="col-md-2"><label class="form-label">Ciclo (días)</label><input type="number" class="form-control form-control-sm" formControlName="ciclo_dias"></div>
+              <div class="col-md-1"><label class="form-label">G</label><input type="number" class="form-control form-control-sm" formControlName="gestaciones"></div>
+              <div class="col-md-1"><label class="form-label">P</label><input type="number" class="form-control form-control-sm" formControlName="partos"></div>
+              <div class="col-md-1"><label class="form-label">C</label><input type="number" class="form-control form-control-sm" formControlName="cesareas"></div>
+              <div class="col-md-1"><label class="form-label">A</label><input type="number" class="form-control form-control-sm" formControlName="abortos"></div>
+              <div class="col-md-3"><label class="form-label">Anticonceptivo</label><input class="form-control form-control-sm" formControlName="metodo_anticonceptivo"></div>
+              <div class="col-md-3"><label class="form-label">Obs.</label><input class="form-control form-control-sm" formControlName="observaciones"></div>
+              <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('gineco')">Agregar</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Descripción</th><th>G-P-C-A</th><th>FUR</th><th>AC</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('gineco'); track x.id_paciente_gineco_obstetrico) {
+                  <tr>
+                    <td>{{ x.descripcion || '—' }}</td>
+                    <td>{{ x.gestaciones ?? '—' }}-{{ x.partos ?? '—' }}-{{ x.cesareas ?? '—' }}-{{ x.abortos ?? '—' }}</td>
+                    <td>{{ x.fur || '—' }}</td>
+                    <td>{{ x.metodo_anticonceptivo || '—' }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('gineco', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="5" class="text-muted text-center py-3">Sin registros gineco</td></tr> }
+              </tbody>
+            </table>
+          }
+
+          <!-- EMBARAZOS -->
+          @if (histSec() === 'embarazos') {
+            <form [formGroup]="formEmbarazo" class="row g-2 align-items-end mb-3">
+              <div class="col-md-2"><label class="form-label">Inicio</label><input type="date" class="form-control form-control-sm" formControlName="fecha_inicio"></div>
+              <div class="col-md-2"><label class="form-label">FUM</label><input type="date" class="form-control form-control-sm" formControlName="fum"></div>
+              <div class="col-md-2"><label class="form-label">FPP</label><input type="date" class="form-control form-control-sm" formControlName="fpp"></div>
+              <div class="col-md-2"><label class="form-label">Semanas</label><input type="number" class="form-control form-control-sm" formControlName="semanas_gestacion"></div>
+              <div class="col-md-2">
+                <label class="form-label">Estado</label>
+                <ng-select class="ng-select-sm" [items]="estadosEmbarazo" bindLabel="nombre" bindValue="id"
+                           formControlName="estado_embarazo" appendTo="body" [clearable]="false"></ng-select>
+              </div>
+              <div class="col-md-2"><label class="form-label">Resultado</label><input class="form-control form-control-sm" formControlName="resultado"></div>
+              <div class="col-md-3"><label class="form-label">Obs.</label><input class="form-control form-control-sm" formControlName="observaciones"></div>
+              <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" (click)="agregar('embarazos')">Agregar</button></div>
+            </form>
+            <table class="table table-sm">
+              <thead><tr><th>Inicio</th><th>FUM</th><th>FPP</th><th>Sem.</th><th>Estado</th><th>Resultado</th><th></th></tr></thead>
+              <tbody>
+                @for (x of itemsDe('embarazos'); track x.id_paciente_embarazo) {
+                  <tr>
+                    <td>{{ x.fecha_inicio || '—' }}</td>
+                    <td>{{ x.fum || '—' }}</td>
+                    <td>{{ x.fpp || '—' }}</td>
+                    <td>{{ x.semanas_gestacion ?? '—' }}</td>
+                    <td>{{ x.estado_embarazo }}</td>
+                    <td>{{ x.resultado || '—' }}</td>
+                    <td><button type="button" class="btn-action-delete" (click)="eliminar('embarazos', x)"><i class="bi bi-trash3"></i></button></td>
+                  </tr>
+                } @empty { <tr><td colspan="7" class="text-muted text-center py-3">Sin embarazos</td></tr> }
+              </tbody>
+            </table>
+          }
+        </div>
+      </div>
+    }
+
+    @if (activeTab() === 'consultas') {
+      <table class="table table-sm align-middle">
+        <thead><tr><th>Fecha</th><th>Motivo</th><th>Estado</th></tr></thead>
+        <tbody>
+          @for (c of consultas(); track c.id_consulta) {
+            <tr>
+              <td>{{ c.fecha_consulta }}</td>
+              <td>{{ c.motivo_consulta }}</td>
+              <td><span class="badge-erp badge-secondary">{{ c.estado }}</span></td>
+            </tr>
+          } @empty {
+            <tr><td colspan="3" class="text-center text-muted py-4">Sin consultas</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (activeTab() === 'citas') {
+      <table class="table table-sm align-middle">
+        <thead><tr><th>Fecha</th><th>Hora</th><th>Tratamiento</th><th>Estado</th></tr></thead>
+        <tbody>
+          @for (c of citas(); track c.id_cita) {
+            <tr>
+              <td>{{ c.fecha_cita }}</td>
+              <td>{{ c.hora_inicio }} - {{ c.hora_fin }}</td>
+              <td>{{ c.nombre_tratamiento || c.tratamiento || c.id_tratamiento }}</td>
+              <td><span class="badge-erp badge-secondary">{{ c.estado }}</span></td>
+            </tr>
+          } @empty {
+            <tr><td colspan="4" class="text-center text-muted py-4">Sin citas</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (activeTab() === 'documentos') {
+      <table class="table table-sm align-middle">
+        <thead><tr><th>Tipo</th><th>Archivo</th><th>Fecha</th></tr></thead>
+        <tbody>
+          @for (d of documentos(); track d.id_documento_paciente) {
+            <tr>
+              <td>{{ d.tipo_documento }}</td>
+              <td>{{ d.nombre_archivo }}</td>
+              <td>{{ d.fecha_documento || '—' }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="3" class="text-center text-muted py-4">Sin documentos</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</div>

@@ -1,0 +1,212 @@
+<div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
+
+  <div class="docs-tabs">
+    <button type="button" class="tab-btn" [class.active]="tab() === 'docs'" (click)="setTab('docs')">Documentos</button>
+    @if (perms.hasPermission('gestionar_tipo_documento')) {
+      <button type="button" class="tab-btn" [class.active]="tab() === 'tipos'" (click)="setTab('tipos')">Tipos / categorías</button>
+    }
+  </div>
+
+  @if (raiz()) {
+    <p class="docs-root mb-3"><i class="bi bi-folder2-open me-1"></i> Raíz: {{ raiz() }}</p>
+  }
+
+  @if (tab() === 'docs') {
+    <div class="card-pro table-pro-container mb-3 p-0 p-md-3 animate__animated animate__fadeInUp">
+      <app-table-pro titulo="Documentos" subtitulo="Escaneados e imágenes del paciente" btnText="SUBIR"
+        [showAddBtn]="perms.hasPermission('crear_documento')" [loading]="crud.tableLoading()"
+        [data]="crud.resource().data" [meta]="crud.resource().meta"
+        (add)="abrirModalSubir(modalSubir)" (pageChange)="crud.cambiarPagina($event)" (search)="onSearch($event)">
+        <thead thead class="text-uppercase text-muted border-bottom table-header-erp">
+          <tr>
+            <th class="ps-3 fw-bold border-0">ID</th>
+            <th class="fw-bold border-0">PACIENTE</th>
+            <th class="fw-bold border-0">TIPO</th>
+            <th class="fw-bold border-0">ARCHIVO</th>
+            <th class="fw-bold border-0">ATENCIÓN</th>
+            <th class="fw-bold border-0">RUTA</th>
+            <th class="text-center border-0">ACCIONES</th>
+          </tr>
+        </thead>
+        <tbody tbody>
+          @for (item of crud.resource().data; track item.id_documento) {
+            <tr class="main-row align-middle fila-animada">
+              <td class="ps-3 py-3"><div class="fw-bold text-primary-erp">#{{ item.id_documento }}</div></td>
+              <td>{{ item.nombre_paciente }}</td>
+              <td><span class="badge-erp badge-secondary">{{ item.tipo_codigo || item.tipo_nombre }}</span></td>
+              <td>
+                <div class="fw-semibold">{{ item.titulo || item.nombre_original }}</div>
+                <div class="text-muted-erp small">{{ item.nombre_archivo }}</div>
+              </td>
+              <td>
+                @if (item.id_consulta) {
+                  <span>#{{ item.id_consulta }}</span>
+                } @else {
+                  <span class="text-muted-erp">GENERAL</span>
+                }
+              </td>
+              <td class="small text-muted-erp" style="max-width:220px;word-break:break-all;">{{ item.ruta_relativa }}</td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-2">
+                  @if (perms.hasPermission('ver_documento')) {
+                    <button type="button" class="btn-action-edit" title="Ver / descargar" (click)="verArchivo(item)">
+                      <i class="bi bi-eye-fill"></i>
+                    </button>
+                  }
+                  @if (perms.hasPermission('eliminar_documento')) {
+                    <button type="button" class="btn-action-delete" (click)="crud.deleteItem(item.id_documento)">
+                      <i class="bi bi-trash3-fill"></i>
+                    </button>
+                  }
+                </div>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="7" class="text-center py-5 text-muted-erp">Sin documentos.</td></tr>
+          }
+        </tbody>
+      </app-table-pro>
+    </div>
+  }
+
+  @if (tab() === 'tipos') {
+    <div class="card-pro table-pro-container mb-3 p-0 p-md-3">
+      <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+        <div>
+          <h5 class="erp-title-section mb-0">Tipos de documento</h5>
+          <p class="text-muted-erp small mb-0">El código define la carpeta en disco (ej. FOTOS, CONSENTIMIENTOS).</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" (click)="abrirModalTipo(modalTipo)">
+          <i class="bi bi-plus-lg me-1"></i> NUEVO TIPO
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead class="text-uppercase text-muted border-bottom table-header-erp">
+            <tr>
+              <th class="ps-3">Código</th>
+              <th>Nombre</th>
+              <th>Extensiones</th>
+              <th class="text-center">Activo</th>
+              <th class="text-center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of tiposAll(); track t.id_tipo_documento) {
+              <tr>
+                <td class="ps-3 fw-bold">{{ t.codigo }}</td>
+                <td>{{ t.nombre }}</td>
+                <td class="small">{{ t.extensiones }}</td>
+                <td class="text-center">{{ t.activo ? 'Sí' : 'No' }}</td>
+                <td class="text-center">
+                  <button type="button" class="btn-action-edit me-1" (click)="abrirModalTipo(modalTipo, t)"><i class="bi bi-pencil-fill"></i></button>
+                  <button type="button" class="btn-action-delete" (click)="eliminarTipo(t)"><i class="bi bi-trash3-fill"></i></button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="5" class="text-center py-4 text-muted-erp">Sin tipos.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</div>
+
+<ng-template #modalSubir let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">Subir documento</h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="form" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Paciente <span class="req-star">*</span></label>
+        <ng-select class="ng-select-sm" [items]="pacientes()" bindLabel="label" bindValue="id_paciente"
+                   formControlName="id_paciente" appendTo="body" [searchable]="true"
+                   placeholder="Buscar paciente..." notFoundText="Sin resultados"></ng-select>
+        <app-form-error [control]="form.get('id_paciente')"></app-form-error>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Tipo / categoría <span class="req-star">*</span></label>
+        <ng-select class="ng-select-sm" [items]="tipos()" bindLabel="nombre" bindValue="id_tipo_documento"
+                   formControlName="id_tipo_documento" appendTo="body" [searchable]="true"
+                   placeholder="Seleccione..." notFoundText="Sin resultados"></ng-select>
+        <app-form-error [control]="form.get('id_tipo_documento')"></app-form-error>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Atención (consulta) — opcional</label>
+        <ng-select class="ng-select-sm" [items]="consultas()" bindLabel="label" bindValue="id_consulta"
+                   formControlName="id_consulta" appendTo="body" [searchable]="true" [clearable]="true"
+                   placeholder="Sin atención → carpeta GENERAL" notFoundText="Sin atenciones"></ng-select>
+        <div class="form-text">Si eliges una atención, el archivo irá en ATENCIONES/año/id_consulta/…</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Título</label>
+        <input type="text" class="form-control" formControlName="titulo" placeholder="Opcional">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Fecha documento</label>
+        <input type="date" class="form-control" formControlName="fecha_documento">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Archivo <span class="req-star">*</span></label>
+        <input type="file" class="form-control" (change)="onFileChange($event)">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Observaciones</label>
+        <textarea class="form-control" rows="2" formControlName="observaciones"></textarea>
+      </div>
+    </form>
+  </div>
+  <div class="modal-footer bg-erp border-top-dashed-erp d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">CANCELAR</button>
+    <button type="button" class="btn btn-primary" (click)="guardarUpload(modal)">
+      <i class="bi bi-cloud-upload me-1"></i> SUBIR
+    </button>
+  </div>
+</ng-template>
+
+<ng-template #modalTipo let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">{{ editingTipoId ? 'Editar' : 'Nuevo' }} tipo</h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="formTipo" class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Código (carpeta) <span class="req-star">*</span></label>
+        <input type="text" class="form-control text-uppercase" formControlName="codigo"
+               placeholder="EJ: CONSENTIMIENTOS"
+               oninput="this.value = this.value.toUpperCase()">
+        <app-form-error [control]="formTipo.get('codigo')"></app-form-error>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Nombre <span class="req-star">*</span></label>
+        <input type="text" class="form-control" formControlName="nombre">
+        <app-form-error [control]="formTipo.get('nombre')"></app-form-error>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Extensiones permitidas</label>
+        <input type="text" class="form-control" formControlName="extensiones" placeholder="pdf,jpg,png">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Activo</label>
+        <ng-select class="ng-select-sm"
+                   [items]="[{id:true,nombre:'Sí'},{id:false,nombre:'No'}]"
+                   bindLabel="nombre" bindValue="id"
+                   formControlName="activo" appendTo="body" [clearable]="false"></ng-select>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Descripción</label>
+        <input type="text" class="form-control" formControlName="descripcion">
+      </div>
+    </form>
+  </div>
+  <div class="modal-footer bg-erp border-top-dashed-erp d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">CANCELAR</button>
+    <button type="button" class="btn btn-primary" (click)="guardarTipo(modal)">
+      <i class="bi bi-save me-1"></i> GUARDAR
+    </button>
+  </div>
+</ng-template>

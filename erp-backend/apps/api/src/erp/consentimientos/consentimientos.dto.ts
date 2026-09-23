@@ -1,0 +1,3 @@
+import{PartialType}from'@nestjs/mapped-types';import{IsNotEmpty,IsNumber,IsOptional,IsString}from'class-validator';
+export class PlantillaConsentimientoDto{@IsString()@IsNotEmpty()nombre!:string;@IsOptional()@IsString()version?:string;@IsString()@IsNotEmpty()contenido_html!:string;@IsOptional()@IsNumber()id_tratamiento?:number;@IsOptional()activa?:boolean;}export class UpdatePlantillaConsentimientoDto extends PartialType(PlantillaConsentimientoDto){}
+export class ConsentimientoDto{@IsNumber()id_consentimiento_plantilla!:number;@IsNumber()id_paciente!:number;@IsOptional()@IsNumber()id_sede?:number;@IsOptional()@IsNumber()id_cita?:number;@IsOptional()@IsNumber()id_consulta?:number;}export class FirmarConsentimientoDto{@IsString()firma_url!:string;}

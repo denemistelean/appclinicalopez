@@ -1,0 +1,39 @@
+.mapa-wrap { max-width: var(--erp-max-width); }
+.mapa-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr 320px;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .mapa-layout { grid-template-columns: 1fr; }
+}
+.mapa-canvas-card { position: relative; min-height: 560px; }
+.mapa-canvas {
+  height: 560px;
+  background: #e9edec;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.mapa-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: #e9edec;
+  color: #6c757d;
+  z-index: 2;
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-reg { background: #1f5f57; }
+.dot-sel { background: #b97a5d; }
+.dot-empty { background: #c8d2cf; }
+.mapa-hint { font-size: 0.8rem; color: var(--erp-muted, #6c757d); }

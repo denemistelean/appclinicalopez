@@ -1,0 +1,69 @@
+<div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
+  <div class="card-pro p-3 mb-3">
+    <h5 class="fw-bold text-erp mb-3">Reportes clínicos</h5>
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Sede</label>
+        <ng-select class="ng-select-sm" [items]="sedes()" bindLabel="nombre" bindValue="id_sede"
+                   [formControl]="idSede" placeholder="Todas" [clearable]="true"></ng-select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Desde</label>
+        <input type="date" class="form-control" [formControl]="fechaDesde">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Hasta</label>
+        <input type="date" class="form-control" [formControl]="fechaHasta">
+      </div>
+      <div class="col-md-3">
+        <button type="button" class="btn btn-primary w-100" (click)="cargar()" [disabled]="loading()">
+          <i class="bi bi-arrow-repeat me-1"></i> Actualizar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card-pro p-3 text-center">
+        <div class="text-muted-erp small">Citas</div>
+        <div class="fs-3 fw-bold text-primary-erp">{{ resumen()?.total_citas ?? resumen()?.citas ?? '—' }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card-pro p-3 text-center">
+        <div class="text-muted-erp small">Pacientes nuevos</div>
+        <div class="fs-3 fw-bold text-primary-erp">{{ resumen()?.pacientes_nuevos ?? resumen()?.pacientes ?? '—' }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card-pro p-3 text-center">
+        <div class="text-muted-erp small">Consultas</div>
+        <div class="fs-3 fw-bold text-primary-erp">{{ resumen()?.total_consultas ?? resumen()?.consultas ?? '—' }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card-pro p-3 text-center">
+        <div class="text-muted-erp small">Facturado</div>
+        <div class="fs-3 fw-bold text-primary-erp">{{ resumen()?.total_facturado ?? resumen()?.facturado ?? '—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-pro p-3">
+    <h6 class="fw-bold mb-3">Citas por estado</h6>
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Estado</th><th class="text-end">Cantidad</th></tr></thead>
+      <tbody>
+        @for (r of citasEstado(); track r.estado || $index) {
+          <tr>
+            <td>{{ r.estado }}</td>
+            <td class="text-end fw-bold">{{ r.total ?? r.cantidad }}</td>
+          </tr>
+        } @empty {
+          <tr><td colspan="2" class="text-center text-muted py-4">Sin datos en el rango.</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

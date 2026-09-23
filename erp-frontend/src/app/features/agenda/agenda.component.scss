@@ -1,0 +1,251 @@
+.agenda-wrap {
+  --ag-line: #e1e4dd;
+  --ag-ink: #1c2620;
+  --ag-faint: #8b958d;
+  --ag-ok: #2e6b4f;
+  --ag-ok-soft: #ddebe3;
+  --ag-danger: #a23b3b;
+  --ag-danger-soft: #f5dede;
+  --ag-warn: #9c5a24;
+  --ag-warn-soft: #f3e4d2;
+}
+
+.agenda-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 992px) {
+  .agenda-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card-erp {
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid var(--ag-line);
+  border-radius: 12px;
+}
+
+.tl-scroll {
+  overflow-x: auto;
+}
+
+.tl {
+  min-width: 860px;
+}
+
+.tl-head {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  margin-bottom: 4px;
+}
+
+.tl-hours {
+  position: relative;
+  height: 22px;
+  border-bottom: 1px solid var(--ag-line);
+}
+
+.tl-hour {
+  position: absolute;
+  top: 0;
+  font-size: 11px;
+  color: var(--ag-faint);
+  font-family: ui-monospace, monospace;
+  transform: translateX(-2px);
+}
+
+.tl-group-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ag-faint);
+  padding: 10px 0 4px 4px;
+}
+
+.tl-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  align-items: center;
+  min-height: 44px;
+  border-top: 1px solid var(--ag-line);
+}
+
+.res-label {
+  padding: 6px 8px 6px 4px;
+}
+
+.res-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.res-meta {
+  font-size: 10.5px;
+  color: var(--ag-faint);
+}
+
+.tl-track {
+  position: relative;
+  height: 44px;
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(10% - 1px),
+    var(--ag-line) 10%
+  );
+}
+
+.block {
+  position: absolute;
+  top: 5px;
+  height: 34px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  color: #fff;
+  padding: 4px 7px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.block b {
+  display: block;
+  font-size: 11px;
+}
+
+.block-estado {
+  display: block;
+  font-size: 9px;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.block .buffer-ext {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.35) 0 4px,
+    transparent 4px 8px
+  );
+  border-radius: 0 7px 7px 0;
+  pointer-events: none;
+}
+
+.block:hover {
+  outline: 2px solid var(--ag-ink);
+  outline-offset: 1px;
+}
+
+.check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.check-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.check-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #fff;
+  font-weight: 700;
+}
+
+.check-icon.pass {
+  background: var(--ag-ok);
+}
+.check-icon.fail {
+  background: var(--ag-danger);
+}
+.check-icon.info {
+  background: var(--ag-faint);
+}
+
+.result-banner {
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.result-banner.ok {
+  background: var(--ag-ok-soft);
+  color: var(--ag-ok);
+}
+
+.result-banner.fail {
+  background: var(--ag-danger-soft);
+  color: var(--ag-danger);
+}
+
+.suggestion-box {
+  padding: 10px 12px;
+  background: var(--ag-warn-soft);
+  border-radius: 9px;
+  font-size: 12px;
+  color: var(--ag-warn);
+}
+
+.pkg-bar {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--ag-line);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.pkg-fill {
+  height: 100%;
+  background: #c97f86;
+}
+
+.wait-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--ag-line);
+  font-size: 12.5px;
+}
+
+.wait-item:first-of-type {
+  border-top: none;
+}
+
+.wait-badge {
+  font-size: 10.5px;
+  background: #f5e3e4;
+  color: #c97f86;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}

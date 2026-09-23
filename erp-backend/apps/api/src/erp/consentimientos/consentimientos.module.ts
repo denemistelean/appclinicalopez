@@ -1,0 +1,1 @@
+import{Module}from'@nestjs/common';import{ConsentimientosController}from'./consentimientos.controller';import{ConsentimientosService}from'./consentimientos.service';@Module({controllers:[ConsentimientosController],providers:[ConsentimientosService]})export class ConsentimientosModule{}

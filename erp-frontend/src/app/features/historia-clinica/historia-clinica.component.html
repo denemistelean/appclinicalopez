@@ -1,0 +1,337 @@
+<div class="hc-wrap">
+  <div class="hc-topbar">
+    <div>
+      <h4 class="hc-title mb-1">Historia clínica</h4>
+      <div class="text-muted-erp small">Anamnesis · Examen físico · Diagnóstico CIE-10 · Plan</div>
+    </div>
+  </div>
+
+  <form [formGroup]="form" class="hc-layout">
+    <div class="hc-main">
+      <!-- CABECERA -->
+      <div class="hc-card">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label">Paciente <span class="req-star">*</span></label>
+            <ng-select class="ng-select-sm" [items]="pacientes()" bindLabel="label" bindValue="id_paciente"
+                       formControlName="id_paciente" [searchable]="true" appendTo="body"
+                       [typeahead]="pacTypeahead$" [minTermLength]="2"
+                       [loading]="pacientesLoading()"
+                       placeholder="DNI, nombre o apellido..."
+                       notFoundText="Escriba al menos 2 caracteres">
+              <ng-template ng-label-tmp let-item="item">{{ item.label || labelPaciente(item) }}</ng-template>
+              <ng-template ng-option-tmp let-item="item">{{ item.label || labelPaciente(item) }}</ng-template>
+            </ng-select>
+            <app-form-error [control]="form.get('id_paciente')"></app-form-error>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Sede <span class="req-star">*</span></label>
+            <ng-select class="ng-select-sm" [items]="sedes()" bindLabel="nombre" bindValue="id_sede"
+                       formControlName="id_sede" [searchable]="true" appendTo="body"></ng-select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Profesional <span class="req-star">*</span></label>
+            <ng-select class="ng-select-sm" [items]="personal()" bindValue="id_personal"
+                       formControlName="id_personal" [searchable]="true" appendTo="body">
+              <ng-template ng-label-tmp let-item="item">{{ labelPersonal(item) }}</ng-template>
+              <ng-template ng-option-tmp let-item="item">{{ labelPersonal(item) }}</ng-template>
+            </ng-select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Fecha <span class="req-star">*</span></label>
+            <input type="datetime-local" class="form-control form-control-sm" formControlName="fecha_consulta">
+          </div>
+        </div>
+      </div>
+
+      <!-- 01 ANAMNESIS -->
+      <div class="hc-card">
+        <div class="hc-section-head">
+          <h5><span class="step-tag">01</span> Anamnesis</h5>
+        </div>
+        <p class="hc-sub">Seleccione una plantilla para autorellenar; todo queda editable.</p>
+
+        <label class="form-label">Plantilla clínica</label>
+        <div class="tmpl-chips">
+          <button type="button" class="tmpl-chip" [class.active]="!form.value.id_plantilla_clinica"
+                  (click)="aplicarPlantilla(null)">Sin plantilla</button>
+          @for (p of plantillas(); track p.id_plantilla_clinica) {
+            <button type="button" class="tmpl-chip"
+                    [class.active]="form.value.id_plantilla_clinica === p.id_plantilla_clinica"
+                    (click)="aplicarPlantilla(p.id_plantilla_clinica)">{{ p.nombre }}</button>
+          }
+        </div>
+
+        <div class="row g-2 mt-1">
+          <div class="col-md-4">
+            <label class="form-label">Tiempo de enfermedad</label>
+            <input type="text" class="form-control form-control-sm" formControlName="tiempo_enfermedad"
+                   placeholder="Ej. 2 años">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Tipo</label>
+            <ng-select class="ng-select-sm" [items]="tiposEnfermedad" bindLabel="nombre" bindValue="id"
+                       formControlName="tipo_enfermedad" [clearable]="true" appendTo="body"></ng-select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Motivo de consulta <span class="req-star">*</span></label>
+            <input type="text" class="form-control form-control-sm" formControlName="motivo_consulta">
+            <app-form-error [control]="form.get('motivo_consulta')"></app-form-error>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Relato</label>
+            <textarea class="form-control form-control-sm" rows="3" formControlName="relato"
+                      placeholder="Relato cronológico de la enfermedad actual…"></textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Adjuntos (referencia / notas)</label>
+            <input type="text" class="form-control form-control-sm" formControlName="adjuntos_nota"
+                   placeholder="Ej. fotos clínicas, informe previo…">
+          </div>
+        </div>
+      </div>
+
+      <!-- 02 EXAMEN FISICO -->
+      <div class="hc-card" formGroupName="examen">
+        <div class="hc-section-head">
+          <h5><span class="step-tag">02</span> Examen físico</h5>
+        </div>
+
+        <h6 class="hc-block-title">General</h6>
+        <div class="row g-2">
+          <div class="col-md-2">
+            <label class="form-label">Peso (kg)</label>
+            <input type="number" step="0.1" class="form-control form-control-sm" formControlName="peso">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Talla (cm)</label>
+            <input type="number" step="0.1" class="form-control form-control-sm" formControlName="talla">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">IMC</label>
+            <input type="text" class="form-control form-control-sm" [value]="imcVal() ?? '—'" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Estado mental</label>
+            <textarea class="form-control form-control-sm" rows="2" formControlName="estado_mental"></textarea>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Estado general</label>
+            <textarea class="form-control form-control-sm" rows="2" formControlName="estado_general"></textarea>
+          </div>
+        </div>
+
+        <h6 class="hc-block-title mt-3">Funciones vitales</h6>
+        <div class="row g-2">
+          <div class="col-md-2">
+            <label class="form-label">PA sistólica</label>
+            <input type="number" class="form-control form-control-sm" formControlName="pa_sistolica" placeholder="mmHg">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">PA diastólica</label>
+            <input type="number" class="form-control form-control-sm" formControlName="pa_diastolica" placeholder="mmHg">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">FC (lpm)</label>
+            <input type="number" class="form-control form-control-sm" formControlName="fc">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">FR (rpm)</label>
+            <input type="number" class="form-control form-control-sm" formControlName="fr">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Sat. O₂ (%)</label>
+            <input type="number" class="form-control form-control-sm" formControlName="sat_o2">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">T° (°C)</label>
+            <input type="number" step="0.1" class="form-control form-control-sm" formControlName="temperatura">
+          </div>
+        </div>
+
+        <h6 class="hc-block-title mt-3">Examen por sistemas</h6>
+        <div class="row g-2" formGroupName="sistemas">
+          @for (s of sistemasCatalogo; track s) {
+            <div class="col-md-6">
+              <label class="form-label">{{ s }}</label>
+              <textarea class="form-control form-control-sm" rows="2" [formControlName]="s"
+                        placeholder="Hallazgos…"></textarea>
+            </div>
+          }
+        </div>
+
+        <h6 class="hc-block-title mt-3">Exámenes anatómicos</h6>
+        <div class="row g-2" formGroupName="anatomicos">
+          @for (a of anatomicosCatalogo; track a) {
+            <div class="col-md-6">
+              <label class="form-label">{{ a }}</label>
+              <textarea class="form-control form-control-sm" rows="2" [formControlName]="a"
+                        placeholder="Descripción / hallazgos…"></textarea>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- 03 DIAGNOSTICO -->
+      <div class="hc-card">
+        <div class="hc-section-head">
+          <h5><span class="step-tag">03</span> Diagnóstico</h5>
+        </div>
+        <p class="hc-sub">Busque por código CIE-10 o descripción. Puede registrar varios.</p>
+
+        <label class="form-label">Buscar CIE-10</label>
+        <ng-select class="ng-select-sm" [items]="cie10Options()" bindLabel="descripcion"
+                   placeholder="Ej. flacidez, A00, diabetes…" appendTo="body" [searchable]="true"
+                   [typeahead]="cie10Typeahead$" [minTermLength]="2"
+                   (change)="agregarDiagnostico($event)"
+                   notFoundText="Escriba al menos 2 caracteres">
+          <ng-template ng-option-tmp let-item="item">
+            <strong class="mono">{{ item.codigo }}</strong>
+            <span class="text-muted-erp small"> ({{ item.categoria }})</span>
+            — {{ item.descripcion }}
+          </ng-template>
+        </ng-select>
+
+        <div class="dx-list mt-3">
+          @for (d of diagnosticos(); track $index; let i = $index) {
+            <div class="dx-item">
+              <div class="dx-main">
+                @if (d.codigo_cie10) {
+                  <span class="mono dx-code">{{ d.codigo_cie10 }}</span>
+                }
+                <span>{{ d.descripcion }}</span>
+              </div>
+              <div class="dx-actions">
+                <ng-select class="ng-select-sm dx-tipo" [items]="tiposDx" bindLabel="nombre" bindValue="id"
+                           [ngModel]="d.tipo" [ngModelOptions]="{standalone: true}"
+                           (ngModelChange)="setTipoDx(i, $event)" appendTo="body" [clearable]="false"></ng-select>
+                <button type="button" class="btn-x" (click)="quitarDiagnostico(i)">✕</button>
+              </div>
+            </div>
+          } @empty {
+            <div class="text-muted-erp small fst-italic">Sin diagnósticos aún.</div>
+          }
+        </div>
+
+        <label class="form-label mt-3">Apreciación</label>
+        <textarea class="form-control form-control-sm" rows="2" formControlName="apreciacion"
+                  placeholder="Impresión clínica / apreciación…"></textarea>
+      </div>
+
+      <!-- 04 PLAN -->
+      <div class="hc-card">
+        <div class="hc-section-head">
+          <h5><span class="step-tag">04</span> Plan terapéutico</h5>
+        </div>
+        <p class="hc-sub">Indique uno o más medicamentos e indicaciones.</p>
+
+        <label class="form-label">Buscar medicamento</label>
+        <ng-select class="ng-select-sm" [items]="medOptions()" bindLabel="nombre"
+                   placeholder="Digite para buscar…" appendTo="body" [searchable]="true"
+                   [typeahead]="medTypeahead$" [minTermLength]="2"
+                   (change)="onMedSelect($event)"
+                   notFoundText="Escriba al menos 2 caracteres">
+          <ng-template ng-option-tmp let-item="item">
+            {{ item.nombre }}
+            @if (item.concentracion) { · {{ item.concentracion }} }
+            @if (item.forma) { · {{ item.forma }} }
+          </ng-template>
+        </ng-select>
+
+        <div class="d-flex justify-content-end mt-2 mb-2">
+          <button type="button" class="btn btn-soft-neutral btn-sm" (click)="agregarMedicamento()">
+            + Medicamento manual
+          </button>
+        </div>
+
+        <div formArrayName="medicamentos" class="med-list">
+          @for (ctrl of medicamentosFA.controls; track $index; let i = $index) {
+            <div class="med-row" [formGroupName]="i">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label">Medicamento</label>
+                  <input class="form-control form-control-sm" formControlName="medicamento">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Dosis</label>
+                  <input class="form-control form-control-sm" formControlName="dosis" placeholder="1 tableta">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Vía</label>
+                  <input class="form-control form-control-sm" formControlName="via" list="viasList">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Frecuencia</label>
+                  <input class="form-control form-control-sm" formControlName="frecuencia" placeholder="c/8h">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Duración</label>
+                  <input class="form-control form-control-sm" formControlName="duracion" placeholder="5 días">
+                </div>
+                <div class="col-md-1">
+                  <button type="button" class="btn btn-outline-danger btn-sm w-100" (click)="quitarMedicamento(i)">✕</button>
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Indicaciones adicionales</label>
+                  <input class="form-control form-control-sm" formControlName="indicaciones">
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+        <datalist id="viasList">
+          @for (v of vias; track v) { <option [value]="v"></option> }
+        </datalist>
+
+        <label class="form-label mt-3">Indicaciones generales del plan</label>
+        <textarea class="form-control form-control-sm" rows="3" formControlName="plan_indicaciones"></textarea>
+
+        @if (perms.hasPermission('crear_historia_clinica')) {
+          <button type="button" class="btn btn-primary w-100 mt-3" [disabled]="saving()" (click)="guardar()">
+            Guardar consulta
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <aside class="hc-side">
+      <div class="hc-card sticky-side">
+        <h5 class="fw-bold text-erp mb-1">Historial de consultas</h5>
+        <div class="hc-sub mb-2">
+          @if (form.value.id_paciente) {
+            {{ historial().length }} consulta(s) del paciente seleccionado.
+          } @else {
+            Seleccione un paciente para ver su historial.
+          }
+        </div>
+        @for (h of historial(); track h.id_consulta) {
+          <div class="hist-item">
+            <button type="button" class="hist-head" (click)="toggleHist(h.id_consulta)">
+              <div>
+                <div class="hist-title">{{ h.plantilla || h.motivo_consulta }}</div>
+                <div class="hist-date mono">{{ h.fecha_consulta }} · {{ h.estado }}</div>
+              </div>
+            </button>
+            @if (expandedHist() === h.id_consulta) {
+              <div class="hist-body">
+                <div><b>Motivo:</b> {{ h.motivo_consulta }}</div>
+                @if (h.relato || h.anamnesis) {
+                  <div><b>Anamnesis:</b> {{ h.relato || h.anamnesis }}</div>
+                }
+                @if (h.examen_fisico) {
+                  <div><b>Examen:</b> {{ h.examen_fisico }}</div>
+                }
+                @if (h.apreciacion) {
+                  <div><b>Apreciación:</b> {{ h.apreciacion }}</div>
+                }
+              </div>
+            }
+          </div>
+        } @empty {
+          <div class="text-muted-erp small fst-italic">Sin consultas previas.</div>
+        }
+      </div>
+    </aside>
+  </form>
+</div>

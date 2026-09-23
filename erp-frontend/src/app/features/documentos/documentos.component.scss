@@ -1,0 +1,24 @@
+.docs-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.docs-tabs .tab-btn {
+  border: 1px solid var(--erp-border, #dde3ea);
+  background: #fff;
+  padding: 0.45rem 1rem;
+  border-radius: 0.4rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--erp-muted, #6c757d);
+}
+.docs-tabs .tab-btn.active {
+  background: var(--erp-primary, #0d6efd);
+  border-color: var(--erp-primary, #0d6efd);
+  color: #fff;
+}
+.docs-root {
+  font-size: 0.8rem;
+  color: var(--erp-muted, #6c757d);
+  word-break: break-all;
+}

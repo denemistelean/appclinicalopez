@@ -1,0 +1,10 @@
+Coloca aquí el modelo 3D del cuerpo:
+
+  erp-frontend/src/assets/models/cuerpo.glb
+
+Angular lo publica en:
+
+  http://localhost:4202/assets/models/cuerpo.glb
+
+El archivo extraído del prototipo HTML ya está en esta carpeta (~10 MB).
+Si reemplazas el modelo, mantén el mismo nombre `cuerpo.glb` o actualiza MAPA_GLB_URL.

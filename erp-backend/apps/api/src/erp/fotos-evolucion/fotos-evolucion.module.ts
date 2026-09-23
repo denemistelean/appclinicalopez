@@ -1,0 +1,1 @@
+import{Module}from'@nestjs/common';import{FotosEvolucionController}from'./fotos-evolucion.controller';import{FotosEvolucionService}from'./fotos-evolucion.service';@Module({controllers:[FotosEvolucionController],providers:[FotosEvolucionService]})export class FotosEvolucionModule{}
