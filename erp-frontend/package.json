@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --port 4202",
+    "start": "ng serve --port 4202 --host 0.0.0.0",
     "build": "ng build && node -e \"require('fs').copyFileSync('src/.htaccess','dist/frontend/browser/.htaccess')\"",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
@@ -42,6 +42,7 @@
     "chart.js": "^4.5.1",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
+    "html2canvas": "^1.4.1",
     "install": "^0.13.0",
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",

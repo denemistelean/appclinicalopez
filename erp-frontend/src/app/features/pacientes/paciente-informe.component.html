@@ -1,0 +1,372 @@
+<div class="informe-toolbar no-print">
+  <div class="d-flex flex-wrap align-items-center gap-2 justify-content-between">
+    <a [routerLink]="['/pacientes', idPaciente()]" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i> Volver a ficha
+    </a>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-sm btn-primary" [disabled]="loading() || exporting() || !informe()" (click)="exportarPdf()">
+        <i class="bi bi-filetype-pdf me-1"></i> Exportar PDF
+      </button>
+    </div>
+  </div>
+</div>
+
+@if (loading()) {
+  <div class="text-center text-muted py-5">Cargando informe…</div>
+} @else if (error()) {
+  <div class="alert alert-danger mx-3">{{ error() }}</div>
+} @else if (informe(); as data) {
+  <div class="informe-stage">
+    <div #hojaPdf class="informe-hoja" id="informe-pdf">
+      <header class="inf-header">
+        <div>
+          <div class="inf-brand">Clínica López</div>
+          <h1 class="inf-title">Informe integral del paciente</h1>
+        </div>
+        <div class="inf-meta">
+          @if (data.generado_en) {
+            <div>Generado: {{ data.generado_en | date: 'dd/MM/yyyy HH:mm' }}</div>
+          }
+          @if (nombreCompleto()) {
+            <div class="fw-semibold">{{ nombreCompleto() }}</div>
+          }
+        </div>
+      </header>
+
+      <!-- Datos personales -->
+      @if (fieldsOf(data.paciente).length) {
+        <section class="inf-sec">
+          <h2>Datos personales</h2>
+          <dl class="inf-dl">
+            @for (f of fieldsOf(data.paciente); track f.key) {
+              <div class="inf-row">
+                <dt>{{ f.label }}</dt>
+                <dd>{{ f.value }}</dd>
+              </div>
+            }
+          </dl>
+        </section>
+      }
+
+      <!-- Tratamientos -->
+      @if (hasSection(data.tratamientos)) {
+        <section class="inf-sec">
+          <h2>Tratamientos</h2>
+          @for (t of data.tratamientos; track t.id_tratamiento; let i = $index) {
+            @if (fieldsOf(t).length) {
+              <div class="inf-card">
+                <div class="inf-card-title">Tratamiento {{ i + 1 }}</div>
+                <dl class="inf-dl">
+                  @for (f of fieldsOf(t); track f.key) {
+                    <div class="inf-row">
+                      <dt>{{ f.label }}</dt>
+                      <dd>{{ f.value }}</dd>
+                    </div>
+                  }
+                </dl>
+              </div>
+            }
+          }
+        </section>
+      }
+
+      @if (hasSection(data.paquetes)) {
+        <section class="inf-sec">
+          <h2>Paquetes adquiridos</h2>
+          @for (p of data.paquetes; track p.id_paciente_paquete; let i = $index) {
+            @if (fieldsOf(p).length) {
+              <div class="inf-card">
+                <div class="inf-card-title">Paquete {{ i + 1 }}</div>
+                <dl class="inf-dl">
+                  @for (f of fieldsOf(p); track f.key) {
+                    <div class="inf-row">
+                      <dt>{{ f.label }}</dt>
+                      <dd>{{ f.value }}</dd>
+                    </div>
+                  }
+                </dl>
+              </div>
+            }
+          }
+        </section>
+      }
+
+      <!-- Citas -->
+      @if (hasSection(data.citas)) {
+        <section class="inf-sec">
+          <h2>Citas y detalle</h2>
+          @for (c of data.citas; track c.id_cita; let i = $index) {
+            @if (fieldsOf(c).length || c.participantes?.length) {
+              <div class="inf-card">
+                <div class="inf-card-title">Cita {{ i + 1 }}</div>
+                <dl class="inf-dl">
+                  @for (f of fieldsOf(c); track f.key) {
+                    <div class="inf-row">
+                      <dt>{{ f.label }}</dt>
+                      <dd>{{ f.value }}</dd>
+                    </div>
+                  }
+                </dl>
+                @if (c.participantes?.length) {
+                  <div class="inf-sub">Participantes</div>
+                  @for (part of c.participantes; track part.id_cita_recurso_humano || $index) {
+                    @if (fieldsOf(part).length) {
+                      <dl class="inf-dl inf-dl-sm">
+                        @for (f of fieldsOf(part); track f.key) {
+                          <div class="inf-row">
+                            <dt>{{ f.label }}</dt>
+                            <dd>{{ f.value }}</dd>
+                          </div>
+                        }
+                      </dl>
+                    }
+                  }
+                }
+              </div>
+            }
+          }
+        </section>
+      }
+
+      <!-- Historia paciente -->
+      @if (tieneHistoriaPaciente()) {
+        <section class="inf-sec">
+          <h2>Historia del paciente</h2>
+          @for (sec of histSecciones; track sec.key) {
+            @if (hasSection(histRows(sec.key))) {
+              <div class="inf-sub">{{ sec.titulo }}</div>
+              @for (row of histRows(sec.key); track $index; let i = $index) {
+                @if (fieldsOf(row).length) {
+                  <div class="inf-card">
+                    <div class="inf-card-title">Registro {{ i + 1 }}</div>
+                    <dl class="inf-dl">
+                      @for (f of fieldsOf(row); track f.key) {
+                        <div class="inf-row">
+                          <dt>{{ f.label }}</dt>
+                          <dd>{{ f.value }}</dd>
+                        </div>
+                      }
+                    </dl>
+                  </div>
+                }
+              }
+            }
+          }
+        </section>
+      }
+
+      <!-- Historias clínicas -->
+      @if (hasSection(data.historias_clinicas)) {
+        <section class="inf-sec">
+          <h2>Historial de historias clínicas</h2>
+          @for (hc of data.historias_clinicas; track hc.id_consulta; let i = $index) {
+            @if (fieldsOf(hc).length || hc.diagnosticos?.length || hc.plan) {
+              <div class="inf-card">
+                <div class="inf-card-title">Consulta {{ i + 1 }}</div>
+                <dl class="inf-dl">
+                  @for (f of fieldsOf(hc); track f.key) {
+                    <div class="inf-row">
+                      <dt>{{ f.label }}</dt>
+                      <dd class="inf-pre">{{ f.value }}</dd>
+                    </div>
+                  }
+                </dl>
+
+                @if (hasSection(hc.diagnosticos)) {
+                  <div class="inf-sub">Diagnósticos</div>
+                  @for (d of hc.diagnosticos; track $index) {
+                    @if (fieldsOf(d).length) {
+                      <dl class="inf-dl inf-dl-sm">
+                        @for (f of fieldsOf(d); track f.key) {
+                          <div class="inf-row">
+                            <dt>{{ f.label }}</dt>
+                            <dd>{{ f.value }}</dd>
+                          </div>
+                        }
+                      </dl>
+                    }
+                  }
+                }
+
+                @if (hc.plan && (fieldsOf(hc.plan).length || hasSection(hc.plan.tratamientos) || hasSection(hc.plan.medicamentos) || hasSection(hc.plan.examenes) || hasSection(hc.plan.imagenes))) {
+                  <div class="inf-sub">Plan</div>
+                  @if (fieldsOf(hc.plan).length) {
+                    <dl class="inf-dl inf-dl-sm">
+                      @for (f of fieldsOf(hc.plan); track f.key) {
+                        <div class="inf-row">
+                          <dt>{{ f.label }}</dt>
+                          <dd class="inf-pre">{{ f.value }}</dd>
+                        </div>
+                      }
+                    </dl>
+                  }
+                  @if (hasSection(hc.plan.tratamientos)) {
+                    <div class="inf-mini">Tratamientos del plan</div>
+                    @for (t of hc.plan.tratamientos; track $index) {
+                      @if (fieldsOf(t).length) {
+                        <dl class="inf-dl inf-dl-sm">
+                          @for (f of fieldsOf(t); track f.key) {
+                            <div class="inf-row"><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></div>
+                          }
+                        </dl>
+                      }
+                    }
+                  }
+                  @if (hasSection(hc.plan.medicamentos)) {
+                    <div class="inf-mini">Medicamentos</div>
+                    @for (m of hc.plan.medicamentos; track $index) {
+                      @if (fieldsOf(m).length) {
+                        <dl class="inf-dl inf-dl-sm">
+                          @for (f of fieldsOf(m); track f.key) {
+                            <div class="inf-row"><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></div>
+                          }
+                        </dl>
+                      }
+                    }
+                  }
+                  @if (hasSection(hc.plan.examenes)) {
+                    <div class="inf-mini">Exámenes</div>
+                    @for (e of hc.plan.examenes; track $index) {
+                      @if (fieldsOf(e).length) {
+                        <dl class="inf-dl inf-dl-sm">
+                          @for (f of fieldsOf(e); track f.key) {
+                            <div class="inf-row"><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></div>
+                          }
+                        </dl>
+                      }
+                    }
+                  }
+                  @if (hasSection(hc.plan.imagenes)) {
+                    <div class="inf-mini">Imágenes</div>
+                    @for (im of hc.plan.imagenes; track $index) {
+                      @if (fieldsOf(im).length) {
+                        <dl class="inf-dl inf-dl-sm">
+                          @for (f of fieldsOf(im); track f.key) {
+                            <div class="inf-row"><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></div>
+                          }
+                        </dl>
+                      }
+                    }
+                  }
+                }
+              </div>
+            }
+          }
+        </section>
+      }
+
+      <!-- Documentos -->
+      @if (hasSection(data.documentos) || hasSection(data.documentos_legacy)) {
+        <section class="inf-sec">
+          <h2>Documentos</h2>
+          @for (d of data.documentos || []; track d.id_documento; let i = $index) {
+            @if (fieldsOf(d).length) {
+              <div class="inf-card">
+                <div class="inf-card-title">Documento {{ i + 1 }}</div>
+                <dl class="inf-dl">
+                  @for (f of fieldsOf(d); track f.key) {
+                    <div class="inf-row">
+                      <dt>{{ f.label }}</dt>
+                      <dd>{{ f.value }}</dd>
+                    </div>
+                  }
+                </dl>
+              </div>
+            }
+          }
+          @for (d of data.documentos_legacy || []; track d.id_documento_paciente; let i = $index) {
+            @if (fieldsOf(d).length) {
+              <div class="inf-card">
+                <div class="inf-card-title">Documento (legado) {{ i + 1 }}</div>
+                <dl class="inf-dl">
+                  @for (f of fieldsOf(d); track f.key) {
+                    <div class="inf-row">
+                      <dt>{{ f.label }}</dt>
+                      <dd>{{ f.value }}</dd>
+                    </div>
+                  }
+                </dl>
+              </div>
+            }
+          }
+        </section>
+      }
+
+      <!-- Mapa corporal / intervenciones -->
+      @if (marcadoresInforme().length || hasSection(histRows('antecedentes_quirurgicos'))) {
+        <section class="inf-sec">
+          <h2>Zonas corporales intervenidas</h2>
+
+          <div class="cuerpo-estados">
+            <span><i class="cuerpo-badge-mini" style="background:#d97706"></i> Planificado</span>
+            <span><i class="cuerpo-badge-mini" style="background:#c0392b"></i> Realizado</span>
+            <span><i class="cuerpo-badge-mini" style="background:#2563eb"></i> Seguimiento</span>
+          </div>
+
+          @if (tieneCapturas3d() && (capturaFrontalUrl() || capturaPosteriorUrl())) {
+            <div class="cuerpo-grid cuerpo-grid-3d">
+              <div class="cuerpo-panel">
+                <div class="cuerpo-label">Vista frontal (3D)</div>
+                <div class="cuerpo-foto">
+                  @if (capturaFrontalUrl()) {
+                    <img [src]="capturaFrontalUrl()!" alt="Mapa corporal frontal" />
+                  } @else {
+                    <div class="cuerpo-foto-empty">Sin captura frontal</div>
+                  }
+                </div>
+              </div>
+              <div class="cuerpo-panel">
+                <div class="cuerpo-label">Vista posterior (3D)</div>
+                <div class="cuerpo-foto">
+                  @if (capturaPosteriorUrl()) {
+                    <img [src]="capturaPosteriorUrl()!" alt="Mapa corporal posterior" />
+                  } @else {
+                    <div class="cuerpo-foto-empty">Sin captura posterior</div>
+                  }
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="cuerpo-sin-captura no-print">
+              <p class="mb-2">
+                Aún no hay capturas 3D de este paciente. En
+                <a [routerLink]="['/mapa-corporal']">Mapa corporal</a>,
+                seleccione al paciente y pulse
+                <strong>Capturar frente y espalda (informe)</strong>.
+              </p>
+            </div>
+          }
+
+          @if (marcadoresInforme().length) {
+            <div class="inf-sub">Detalle de marcadores</div>
+            @for (z of marcadoresInforme(); track z.n) {
+              @if (fieldsOfMarcador(z.row).length || z.procedimiento || z.notas) {
+                <div class="inf-card">
+                  <div class="inf-card-title">
+                    <span class="cuerpo-badge cuerpo-badge-sm" [style.background]="z.color">{{ z.n }}</span>
+                    Marcador {{ z.n }}
+                    @if (z.estado) {
+                      <em class="inf-estado">{{ z.estado }}</em>
+                    }
+                  </div>
+                  <dl class="inf-dl">
+                    @for (f of fieldsOfMarcador(z.row); track f.key) {
+                      <div class="inf-row">
+                        <dt>{{ f.label }}</dt>
+                        <dd>{{ f.value }}</dd>
+                      </div>
+                    }
+                  </dl>
+                </div>
+              }
+            }
+          }
+        </section>
+      }
+
+      <footer class="inf-footer">
+        Documento generado automáticamente · Solo se incluyen datos con valor
+      </footer>
+    </div>
+  </div>
+}

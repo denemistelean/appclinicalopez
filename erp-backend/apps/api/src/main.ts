@@ -3,6 +3,7 @@ process.env.TZ = 'America/Lima';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express'; // 🔥 NUEVO: Para servir archivos estáticos
+import { json, urlencoded } from 'express';
 import { join } from 'path'; // 🔥 NUEVO: Para manejar las rutas de las carpetas
 import helmet from 'helmet';
 import { ApiModule } from './api.module';
@@ -15,7 +16,12 @@ async function bootstrap() {
   // 🔥 Usamos NestExpressApplication para habilitar la exposición de la carpeta 'uploads'
   const app = await NestFactory.create<NestExpressApplication>(ApiModule, {
     logger: WinstonModule.createLogger(winstonConfig),
+    bodyParser: false,
   });
+
+  // Capturas PNG base64 del mapa 3D (~1–4 MB c/u)
+  app.use(json({ limit: '20mb' }));
+  app.use(urlencoded({ extended: true, limit: '20mb' }));
   
   app.enableShutdownHooks();
 

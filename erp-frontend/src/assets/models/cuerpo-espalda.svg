@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 480" fill="none">
+  <defs>
+    <linearGradient id="skinBack" x1="100" y1="10" x2="100" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#eef4f8"/>
+      <stop offset="1" stop-color="#c8d7e4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cabeza -->
+  <ellipse cx="100" cy="42" rx="26" ry="30" fill="url(#skinBack)" stroke="#5f7a90" stroke-width="2"/>
+  <!-- Cuello / nuca -->
+  <path d="M88 68 C90 82 110 82 112 68" fill="url(#skinBack)" stroke="#5f7a90" stroke-width="2"/>
+
+  <!-- Contorno espalda -->
+  <path
+    fill="url(#skinBack)"
+    stroke="#5f7a90"
+    stroke-width="2"
+    stroke-linejoin="round"
+    d="
+      M86 72
+      C78 78 70 88 62 98
+      C48 112 38 130 36 152
+      L32 198
+      C30 210 38 218 48 216
+      L58 212
+      L54 250
+      C50 278 52 300 62 312
+      L70 320
+      L66 392
+      C64 422 62 448 58 464
+      C56 470 62 474 70 472
+      L78 468
+      C84 464 86 452 88 436
+      L92 360
+      L100 352
+      L108 360
+      L112 436
+      C114 452 116 464 122 468
+      L130 472
+      C138 474 144 470 142 464
+      C138 448 136 422 134 392
+      L130 320
+      L138 312
+      C148 300 150 278 146 250
+      L142 212
+      L152 216
+      C162 218 170 210 168 198
+      L164 152
+      C162 130 152 112 138 98
+      C130 88 122 78 114 72
+      C110 84 90 84 86 72
+      Z
+    "/>
+
+  <!-- Glúteos -->
+  <ellipse cx="86" cy="268" rx="18" ry="22" fill="#b9c9d6" stroke="#5f7a90" stroke-width="1.4" opacity="0.55"/>
+  <ellipse cx="114" cy="268" rx="18" ry="22" fill="#b9c9d6" stroke="#5f7a90" stroke-width="1.4" opacity="0.55"/>
+
+  <!-- Escápulas / columna -->
+  <path d="M78 130 C88 142 88 168 82 186" stroke="#8aa0b2" stroke-width="1.2" opacity="0.5" fill="none"/>
+  <path d="M122 130 C112 142 112 168 118 186" stroke="#8aa0b2" stroke-width="1.2" opacity="0.5" fill="none"/>
+  <path d="M100 96 L100 310" stroke="#8aa0b2" stroke-width="1.4" opacity="0.45"/>
+</svg>

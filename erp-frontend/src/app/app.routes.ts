@@ -66,6 +66,13 @@ export const routes: Routes = [
         data: { permiso: 'ver_paciente' },
       },
       {
+        path: 'pacientes/:id/informe',
+        loadComponent: () =>
+          import('./features/pacientes/paciente-informe.component').then((m) => m.PacienteInformeComponent),
+        canActivate: [permissionGuard],
+        data: { permiso: 'ver_paciente' },
+      },
+      {
         path: 'pacientes/:id',
         loadComponent: () => import('./features/pacientes/paciente-ficha.component').then(m => m.PacienteFichaComponent),
         canActivate: [permissionGuard],

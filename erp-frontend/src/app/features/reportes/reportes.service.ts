@@ -45,4 +45,8 @@ export class ReportesService {
     }
     return this.http.get(`${this.apiUrl}/citas-por-estado`, { params: httpParams });
   }
+
+  getInformePaciente(idPaciente: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/paciente/${idPaciente}`);
+  }
 }

@@ -24,4 +24,23 @@ export class MapaCorporalService {
   delete(id: number): Observable<any> {
     return this.http.delete(`${this.apiUrl}/${id}`);
   }
+
+  estadoCapturas(idPaciente: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/paciente/${idPaciente}/capturas`);
+  }
+
+  guardarCapturas(idPaciente: number, data: { frontal?: string; posterior?: string }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/paciente/${idPaciente}/capturas`, data);
+  }
+
+  /** Descarga PNG autenticado (JWT vía interceptor). */
+  getCapturaBlob(idPaciente: number, vista: 'frontal' | 'posterior'): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/paciente/${idPaciente}/capturas/${vista}`, {
+      responseType: 'blob',
+    });
+  }
+
+  eliminarCapturas(idPaciente: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/paciente/${idPaciente}/capturas`);
+  }
 }

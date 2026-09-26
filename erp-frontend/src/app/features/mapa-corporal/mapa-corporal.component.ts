@@ -30,6 +30,7 @@ import {
   PROCEDIMIENTOS_MAPA,
   ZONAS_ANATOMICAS,
 } from './mapa-corporal.zones';
+import { proyectarPunto3dA2d } from './mapa-corporal-2d.util';
 
 type MarkerMesh = {
   zonaCodigo: string;
@@ -70,6 +71,7 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
   hideEmpty = signal(false);
   autoRotate = signal(false);
   selectedCodigo = signal<string | null>(null);
+  capturando = signal(false);
 
   procedimientos = PROCEDIMIENTOS_MAPA;
   estados = ESTADOS_MAPA;
@@ -106,6 +108,9 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
       pos_x: [0],
       pos_y: [0],
       pos_z: [0],
+      vista_2d: [null as 'front' | 'back' | null],
+      pos_2d_x: [null as number | null],
+      pos_2d_y: [null as number | null],
     });
   }
 
@@ -203,7 +208,7 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xe9edec);
     this.camera = new THREE.PerspectiveCamera(40, el.clientWidth / Math.max(el.clientHeight, 1), 0.01, 1000);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(window.devicePixelRatio || 1);
     this.renderer.setSize(el.clientWidth, el.clientHeight);
     el.appendChild(this.renderer.domElement);
@@ -306,6 +311,180 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
     this.controls.minDistance = maxDim * 0.3;
     this.controls.maxDistance = maxDim * 4;
     this.controls.update();
+  }
+
+  private placeCameraSide(side: 'front' | 'back') {
+    if (!this.camera || !this.controls) return;
+    const maxDim = Math.max(this.modelSize.x, this.modelSize.y, this.modelSize.z) || 1;
+    const dist = maxDim * 1.65;
+    const y = this.modelSize.y * 0.12;
+    const z = side === 'front' ? dist : -dist;
+    this.camera.position.set(0, y, z);
+    this.controls.target.set(0, this.modelSize.y * 0.08, 0);
+    this.controls.update();
+    this.camera.lookAt(this.controls.target);
+  }
+
+  private renderOnce() {
+    if (!this.scene || !this.camera || !this.renderer) return;
+    this.controls?.update();
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  private async nextFrame(): Promise<void> {
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  }
+
+  /** Mismo criterio de orden que el informe (reportes.service). */
+  private registrosNumerados(): { n: number; rec: any; mesh?: THREE.Mesh }[] {
+    const estadoRank = (e: string) =>
+      e === 'REALIZADO' ? 0 : e === 'SEGUIMIENTO' ? 1 : 2;
+    const list = [...this.registros()].sort((a, b) => {
+      const ra = estadoRank(String(a.estado || ''));
+      const rb = estadoRank(String(b.estado || ''));
+      if (ra !== rb) return ra - rb;
+      const fa = String(a.fecha_plan || '');
+      const fb = String(b.fecha_plan || '');
+      if (fa !== fb) return fb.localeCompare(fa);
+      return Number(b.id_mapa_marcador || 0) - Number(a.id_mapa_marcador || 0);
+    });
+    return list.map((rec, i) => {
+      const mesh =
+        this.markers.find((m) => m.zonaCodigo === rec.zona_codigo)?.mesh ||
+        this.markers.find((m) => m.recordId === Number(rec.id_mapa_marcador))?.mesh;
+      return { n: i + 1, rec, mesh };
+    });
+  }
+
+  private colorEstadoHex(estado: string): string {
+    switch (String(estado || '').toUpperCase()) {
+      case 'REALIZADO':
+        return '#c0392b';
+      case 'SEGUIMIENTO':
+        return '#2563eb';
+      case 'PLANIFICADO':
+        return '#d97706';
+      default:
+        return '#1f5f57';
+    }
+  }
+
+  private markerVista(rec: any, mesh?: THREE.Mesh): 'front' | 'back' {
+    if (rec?.vista_2d === 'front' || rec?.vista_2d === 'back') return rec.vista_2d;
+    const lado = String(rec?.lado || '').toLowerCase();
+    if (lado.includes('post')) return 'back';
+    if (lado.includes('front')) return 'front';
+    const z = mesh ? mesh.position.z : Number(rec?.pos_z);
+    return !Number.isNaN(z) && z < 0 ? 'back' : 'front';
+  }
+
+  /** Render 3D + badges numerados 1..N proyectados en pantalla. */
+  private captureWithNumbers(side: 'front' | 'back'): string {
+    if (!this.renderer || !this.camera) return '';
+    this.renderOnce();
+    const gl = this.renderer.domElement;
+    const w = gl.width;
+    const h = gl.height;
+    const out = document.createElement('canvas');
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext('2d');
+    if (!ctx) return gl.toDataURL('image/png');
+
+    ctx.drawImage(gl, 0, 0);
+    const items = this.registrosNumerados().filter(
+      (x) => x.mesh && this.markerVista(x.rec, x.mesh) === side,
+    );
+
+    const badgeR = Math.max(14, Math.round(Math.min(w, h) * 0.022));
+    for (const item of items) {
+      const mesh = item.mesh!;
+      const v = mesh.getWorldPosition(new THREE.Vector3()).project(this.camera);
+      // Fuera del frustum / detrás
+      if (v.z < -1 || v.z > 1 || Math.abs(v.x) > 1.15 || Math.abs(v.y) > 1.15) continue;
+      const x = (v.x * 0.5 + 0.5) * w;
+      const y = (-v.y * 0.5 + 0.5) * h;
+      const fill = this.colorEstadoHex(item.rec.estado);
+
+      ctx.beginPath();
+      ctx.arc(x, y, badgeR, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.lineWidth = Math.max(2, badgeR * 0.18);
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${Math.round(badgeR * 1.05)}px Segoe UI, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(item.n), x, y + 0.5);
+    }
+
+    return out.toDataURL('image/png');
+  }
+
+  /** Captura PNG frente + espalda con marcadores del paciente y las guarda para el informe. */
+  async generarCapturasInforme() {
+    const idPaciente = Number(this.formPac.value.id_paciente);
+    if (!idPaciente) {
+      this.alert.warning('Seleccione un paciente.');
+      return;
+    }
+    if (!this.renderer || !this.camera || !this.bodyModel) {
+      this.alert.warning('El modelo 3D aún no está listo.');
+      return;
+    }
+    if (!this.perms.hasPermission('actualizar_mapa_marcador')) {
+      this.alert.warning('Sin permiso para guardar capturas.');
+      return;
+    }
+    if (!this.registros().length) {
+      this.alert.warning('Guarde al menos un marcador antes de capturar.');
+      return;
+    }
+
+    this.capturando.set(true);
+    this.alert.showLoading('Capturando vistas 3D numeradas…');
+    const prevAuto = this.autoRotate();
+    const prevHide = this.hideEmpty();
+    try {
+      if (this.controls) this.controls.autoRotate = false;
+      this.autoRotate.set(false);
+      // Solo marcadores con registro clínico
+      this.hideEmpty.set(true);
+      this.refreshMarkerColors();
+
+      this.placeCameraSide('front');
+      await this.nextFrame();
+      const frontal = this.captureWithNumbers('front');
+
+      this.placeCameraSide('back');
+      await this.nextFrame();
+      const posterior = this.captureWithNumbers('back');
+
+      await new Promise<void>((resolve, reject) => {
+        this.service.guardarCapturas(idPaciente, { frontal, posterior }).subscribe({
+          next: () => resolve(),
+          error: (err) => reject(err),
+        });
+      });
+
+      this.alert.closeLoading();
+      this.alert.toast('Capturas numeradas guardadas para el informe', 'success');
+    } catch (err: any) {
+      this.alert.closeLoading();
+      this.alert.error(err?.error?.mensaje || err?.error?.message || 'No se pudieron guardar las capturas.');
+    } finally {
+      this.hideEmpty.set(prevHide);
+      this.autoRotate.set(prevAuto);
+      if (this.controls) this.controls.autoRotate = prevAuto;
+      this.refreshMarkerColors();
+      this.placeCamera();
+      this.capturando.set(false);
+      this.cdr.markForCheck();
+    }
   }
 
   private markerRadius() {
@@ -430,6 +609,14 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
     if (!m) return;
     this.selectedCodigo.set(codigo);
     const rec = this.recordFor(codigo);
+    const proy =
+      rec?.vista_2d && rec?.pos_2d_x != null && rec?.pos_2d_y != null
+        ? {
+            vista_2d: rec.vista_2d,
+            pos_2d_x: Number(rec.pos_2d_x),
+            pos_2d_y: Number(rec.pos_2d_y),
+          }
+        : this.calcularProyeccion2d(m.pos, m.lado, codigo);
     this.formZona.reset({
       id_mapa_marcador: rec?.id_mapa_marcador ?? null,
       zona_codigo: codigo,
@@ -443,9 +630,24 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
       pos_x: m.pos.x,
       pos_y: m.pos.y,
       pos_z: m.pos.z,
+      vista_2d: proy.vista_2d,
+      pos_2d_x: proy.pos_2d_x,
+      pos_2d_y: proy.pos_2d_y,
     });
     this.refreshMarkerColors();
     this.cdr.markForCheck();
+  }
+
+  private calcularProyeccion2d(
+    pos: THREE.Vector3,
+    lado: string,
+    zonaCodigo: string,
+  ) {
+    return proyectarPunto3dA2d(
+      { x: pos.x, y: pos.y, z: pos.z },
+      { x: this.modelSize.x || 1, y: this.modelSize.y || 1, z: this.modelSize.z || 1 },
+      { lado, zonaCodigo },
+    );
   }
 
   guardarZona() {
@@ -462,6 +664,11 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
       return;
     }
     const z = this.formZona.getRawValue();
+    const proy = this.calcularProyeccion2d(
+      new THREE.Vector3(Number(z.pos_x), Number(z.pos_y), Number(z.pos_z)),
+      z.lado,
+      z.zona_codigo,
+    );
     const payload = {
       id_paciente: Number(this.formPac.value.id_paciente),
       zona_codigo: z.zona_codigo,
@@ -474,6 +681,9 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
       pos_x: Number(z.pos_x),
       pos_y: Number(z.pos_y),
       pos_z: Number(z.pos_z),
+      vista_2d: proy.vista_2d,
+      pos_2d_x: proy.pos_2d_x,
+      pos_2d_y: proy.pos_2d_y,
       origen: z.origen || 'CATALOGO',
     };
     const id = z.id_mapa_marcador ? Number(z.id_mapa_marcador) : null;

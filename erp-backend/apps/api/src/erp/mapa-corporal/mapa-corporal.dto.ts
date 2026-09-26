@@ -25,6 +25,11 @@ export class MapaMarcadorDto {
   @Transform(toNum) @IsNumber() pos_y!: number;
   @Transform(toNum) @IsNumber() pos_z!: number;
   @IsOptional()
+  @IsIn(['front', 'back'])
+  vista_2d?: string | null;
+  @IsOptional() @Transform(toNum) @IsNumber() pos_2d_x?: number | null;
+  @IsOptional() @Transform(toNum) @IsNumber() pos_2d_y?: number | null;
+  @IsOptional()
   @IsIn(['CATALOGO', 'MANUAL'])
   origen?: string;
 }

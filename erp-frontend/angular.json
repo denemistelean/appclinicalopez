@@ -79,7 +79,8 @@
           "builder": "@angular/build:dev-server",
           "options": {
             "buildTarget": "frontend:build",
-            "port": 4202
+            "port": 4202,
+            "host": "0.0.0.0"
           },
           "configurations": {
             "production": {
