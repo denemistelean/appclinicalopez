@@ -1,0 +1,768 @@
+<div class="ap-wrap">
+  @if (loading()) {
+    <div class="ap-empty">Cargando atención…</div>
+  } @else if (!paciente()) {
+    <div class="ap-empty">
+      Paciente no encontrado.
+      <button type="button" class="btn btn-link" (click)="volverAgenda()">Volver a agenda</button>
+    </div>
+  } @else {
+    <!-- Breadcrumb -->
+    <nav class="ap-bc">
+      <a routerLink="/pacientes">Pacientes</a>
+      <span>/</span>
+      <span class="text-uppercase">{{ paciente()?.nombres }} {{ paciente()?.apellidos }}</span>
+    </nav>
+
+    <!-- Header paciente -->
+    <header class="ap-head">
+      <div class="ap-avatar">{{ iniciales() }}</div>
+      <div class="ap-head-main">
+        <h1 class="ap-name">{{ nombreFmt() }}</h1>
+        <div class="ap-meta">
+          @if (edadLabel()) { <span>{{ edadLabel() }}</span> }
+          @if (paciente()?.sexo) { <span>{{ paciente()?.sexo }}</span> }
+          @if (paciente()?.numero_documento) {
+            <span>{{ paciente()?.tipo_documento || 'DNI' }} {{ paciente()?.numero_documento }}</span>
+          }
+          @if (paciente()?.telefono || paciente()?.celular) {
+            <span><i class="bi bi-telephone"></i> {{ paciente()?.telefono || paciente()?.celular }}</span>
+          }
+        </div>
+      </div>
+      <div class="ap-head-actions">
+        @if (idCita()) {
+          <button type="button" class="btn btn-outline-primary btn-sm" (click)="irAHistoriaClinica()">
+            <i class="bi bi-clipboard2-pulse"></i> Cita clínica
+          </button>
+        }
+        <button type="button" class="btn btn-soft-neutral btn-sm" (click)="volverAgenda()">
+          <i class="bi bi-calendar3"></i> Agenda
+        </button>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <div class="ap-tabs">
+      @for (t of tabs; track t.id) {
+        <button type="button" class="ap-tab" [class.active]="tab() === t.id" (click)="setTab(t.id)">
+          {{ t.label }}
+        </button>
+      }
+    </div>
+
+    <!-- RESUMEN -->
+    @if (tab() === 'resumen') {
+      <div class="ap-grid">
+        @for (sec of secciones; track sec.key) {
+          <section class="ap-card">
+            <div class="ap-card-head">
+              <div class="ap-card-title">
+                <i class="bi" [class]="sec.icon"></i>
+                <span>{{ sec.titulo }}</span>
+              </div>
+            </div>
+            <div class="ap-card-body">
+              @if (noRefiereSec(sec) && !itemsDe(sec).length) {
+                <div class="ap-empty-sec muted">No refiere</div>
+              } @else if (!itemsDe(sec).length) {
+                <div class="ap-empty-sec">Sin registros</div>
+              } @else {
+                <ul class="ap-list">
+                  @for (it of itemsDe(sec); track $index) {
+                    <li>
+                      <div class="ap-list-main">
+                        <span class="ap-list-label">{{ labelItem(sec, it) }}</span>
+                        @if (fechaItem(sec, it); as f) {
+                          <span class="ap-list-date">{{ f }}</span>
+                        }
+                      </div>
+                      @if (perms.hasPermission('eliminar_historia_paciente')) {
+                        <button type="button" class="ap-del" title="Eliminar"
+                                (click)="eliminarItem(sec, it)">
+                          <i class="bi bi-dash-circle"></i>
+                        </button>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+            <div class="ap-card-foot">
+              @if (perms.hasPermission('crear_historia_paciente')) {
+                <button type="button" class="btn-add" (click)="abrirAgregar(sec, modalSeccion)">
+                  + Agregar
+                </button>
+              }
+              @if (sec.hasNoRefiere && perms.hasPermission('actualizar_historia_paciente')) {
+                <button type="button" class="btn-noref" (click)="marcarNoRefiere(sec)"
+                        [disabled]="noRefiereSec(sec) && !itemsDe(sec).length">
+                  <i class="bi bi-slash-circle"></i> No refiere
+                </button>
+              }
+            </div>
+          </section>
+        }
+      </div>
+    }
+
+    @if (tab() === 'atenciones') {
+      <div class="aten-layout">
+        <aside class="aten-list">
+          <div class="aten-list-head">
+            <span>Citas del paciente</span>
+            <button type="button" class="btn-link-sm" (click)="cargarCitasPaciente(idPaciente())">Actualizar</button>
+          </div>
+          @for (c of citasPaciente(); track c.id_cita) {
+            <button type="button" class="aten-item"
+                    [class.active]="citaSel()?.id_cita === c.id_cita"
+                    (click)="seleccionarCita(c)">
+              <div class="aten-item-main">
+                <div class="aten-item-title">{{ tituloCita(c) }}</div>
+                <div class="aten-item-meta">
+                  {{ c.personal || '—' }} · {{ c.tipo_cita || 'Cita' }}
+                  @if (horaCita(c); as h) { · {{ h }} }
+                </div>
+              </div>
+              <div class="aten-item-date">{{ fechaCitaCorta(c) }}</div>
+            </button>
+          } @empty {
+            <div class="ap-empty-sec">Sin citas registradas</div>
+          }
+        </aside>
+
+        <section class="aten-detail">
+          @if (!citaSel()) {
+            <div class="ap-placeholder">Seleccione una cita a la izquierda</div>
+          } @else {
+            <div class="aten-detail-head">
+              <div>
+                <h5 class="mb-1">{{ tituloCita(citaSel()) }}</h5>
+                <div class="aten-item-meta">
+                  {{ citaSel()?.personal }} · {{ fechaCitaCorta(citaSel()) }}
+                  @if (horaCita(citaSel()); as h) { · {{ h }} }
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <span class="aten-badge" [class.ok]="estadoConsultaLabel(citaSel()) === 'Completada'">
+                  {{ estadoConsultaLabel(citaSel()) }}
+                </span>
+                @if (!citaSel()?.id_consulta || citaSel()?.consulta_estado === 'BORRADOR') {
+                  <button type="button" class="btn btn-primary btn-sm" (click)="irAtenderDesdeCita(citaSel())">
+                    Atender
+                  </button>
+                }
+              </div>
+            </div>
+
+            <div class="aten-subtabs">
+              <button type="button" [class.active]="atenSubTab() === 'resumen'" (click)="atenSubTab.set('resumen')">Resumen</button>
+              <button type="button" [class.active]="atenSubTab() === 'documentos'" (click)="atenSubTab.set('documentos')">Documentos</button>
+            </div>
+
+            @if (loadingConsulta()) {
+              <div class="ap-empty-sec">Cargando atención…</div>
+            } @else if (atenSubTab() === 'resumen') {
+              @if (consultaDetalle(); as cons) {
+                <div class="aten-acc">
+                  <details open>
+                    <summary>Anamnesis</summary>
+                    <div class="aten-acc-body">
+                      <div><b>Motivo:</b> {{ cons.motivo_consulta }}</div>
+                      @if (cons.tipo_enfermedad) { <div><b>Tipo:</b> {{ cons.tipo_enfermedad }}</div> }
+                      @if (cons.tiempo_enfermedad) { <div><b>Tiempo:</b> {{ cons.tiempo_enfermedad }}</div> }
+                      <div class="mt-2"><b>Relato</b></div>
+                      <div class="aten-text">{{ cons.relato || cons.anamnesis || '—' }}</div>
+                    </div>
+                  </details>
+                  <details open>
+                    <summary>Examen Físico</summary>
+                    <div class="aten-acc-body">
+                      <div class="aten-text">{{ cons.examen_fisico || 'Sin hallazgos registrados.' }}</div>
+                      @if (cons.examen_json?.marcadores?.length) {
+                        <div class="mt-2">
+                          <b>Mapa corporal 3D</b>
+                          @for (m of cons.examen_json.marcadores; track $index) {
+                            <div>{{ m.zona }}@if (m.lado) { ({{ m.lado }}) } — {{ m.procedimiento }}
+                              @if (m.estado) { · {{ m.estado }} }
+                              @if (m.notas) { · {{ m.notas }} }
+                            </div>
+                          }
+                        </div>
+                      }
+                      @if (cons.examen_json; as ex) {
+                        <div class="small text-muted mt-2">
+                          @if (ex.peso) { Peso {{ ex.peso }} kg · }
+                          @if (ex.talla) { Talla {{ ex.talla }} cm · }
+                          @if (ex.imc) { IMC {{ ex.imc }} }
+                          @if (ex.pa_sistolica) { · PA {{ ex.pa_sistolica }}/{{ ex.pa_diastolica }} }
+                        </div>
+                      }
+                    </div>
+                  </details>
+                  <details open>
+                    <summary>Diagnóstico
+                      <span class="aten-count">{{ (cons.diagnosticos || []).length }} registro(s)</span>
+                    </summary>
+                    <div class="aten-acc-body">
+                      @for (d of cons.diagnosticos || []; track $index; let i = $index) {
+                        <div class="mb-1">{{ i + 1 }}.
+                          @if (d.codigo_cie10) { <code>{{ d.codigo_cie10 }}</code> }
+                          {{ d.descripcion }}
+                          <span class="text-muted">({{ d.tipo }})</span>
+                        </div>
+                      } @empty { <div class="text-muted">Sin diagnósticos</div> }
+                      @if (cons.apreciacion) {
+                        <div class="mt-2"><b>Apreciación:</b> {{ cons.apreciacion }}</div>
+                      }
+                    </div>
+                  </details>
+                  <details open>
+                    <summary>Plan
+                      <span class="aten-count">{{ (cons.plan?.medicamentos || []).length }} registro(s)</span>
+                    </summary>
+                    <div class="aten-acc-body">
+                      @for (m of cons.plan?.medicamentos || []; track $index; let i = $index) {
+                        <div class="mb-1">{{ i + 1 }}. {{ m.medicamento }}
+                          @if (m.dosis) { · {{ m.dosis }} }
+                          @if (m.frecuencia) { · {{ m.frecuencia }} }
+                        </div>
+                      } @empty { <div class="text-muted">Sin medicamentos</div> }
+                      @if (cons.plan?.indicaciones_generales) {
+                        <div class="mt-2"><b>Indicaciones:</b> {{ cons.plan.indicaciones_generales }}</div>
+                      }
+                    </div>
+                  </details>
+                </div>
+              } @else {
+                <div class="ap-placeholder">
+                  <p>Esta cita aún no tiene atención registrada.</p>
+                  <button type="button" class="btn btn-primary" (click)="irAtenderDesdeCita(citaSel())">
+                    Iniciar atención
+                  </button>
+                </div>
+              }
+            } @else {
+              @if (loadingDocs()) {
+                <div class="ap-empty-sec">Cargando documentos…</div>
+              } @else if (docsDeCitaSel().length) {
+                <div class="ap-docs-list">
+                  @for (d of docsDeCitaSel(); track d.id_documento) {
+                    <button type="button" class="ap-doc-row" (click)="verDocumento(d)">
+                      <div class="ap-doc-ico"><i class="bi bi-file-earmark-pdf"></i></div>
+                      <div class="ap-doc-main">
+                        <div class="ap-doc-title">{{ d.titulo || d.nombre_original || d.nombre_archivo }}</div>
+                        <div class="ap-doc-meta">
+                          {{ d.tipo_nombre || d.tipo_codigo || 'Documento' }}
+                          · {{ fechaDocFmt(d) }}
+                          · {{ tamanoDoc(d.tamano_bytes) }}
+                        </div>
+                      </div>
+                      <i class="bi bi-box-arrow-up-right text-muted"></i>
+                    </button>
+                  }
+                </div>
+              } @else {
+                <div class="ap-placeholder">
+                  No hay PDF generados para esta atención.
+                  <div class="mt-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm" (click)="setTab('archivos')">
+                      Ver todos los archivos
+                    </button>
+                  </div>
+                </div>
+              }
+            }
+          }
+        </section>
+      </div>
+    }
+    @if (tab() === 'archivos') {
+      <section class="ap-archivos">
+        <div class="ap-section-head">
+          <div>
+            <h5 class="mb-0">Archivos del paciente</h5>
+            <div class="text-muted-erp small">Incluye PDF autogenerados al finalizar cada atención</div>
+          </div>
+        </div>
+        @if (loadingDocs()) {
+          <div class="ap-empty-sec">Cargando documentos…</div>
+        } @else if (!documentosPaciente().length) {
+          <div class="ap-placeholder">Aún no hay documentos registrados para este paciente.</div>
+        } @else {
+          <div class="table-responsive ap-table-wrap">
+            <table class="table ap-table mb-0">
+              <thead>
+                <tr>
+                  <th>Documento</th>
+                  <th>Tipo</th>
+                  <th>Fecha</th>
+                  <th>Tamaño</th>
+                  <th>Origen</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (d of documentosPaciente(); track d.id_documento) {
+                  <tr>
+                    <td class="fw-semibold">
+                      <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                      {{ d.titulo || d.nombre_original || d.nombre_archivo }}
+                    </td>
+                    <td>{{ d.tipo_nombre || d.tipo_codigo || '—' }}</td>
+                    <td>{{ fechaDocFmt(d) }}</td>
+                    <td>{{ tamanoDoc(d.tamano_bytes) }}</td>
+                    <td>
+                      @if (d.observaciones && (d.observaciones + '').includes('automáticamente')) {
+                        <span class="aten-badge ok">Autogenerado</span>
+                      } @else if (d.id_consulta) {
+                        <span class="aten-badge">Atención #{{ d.id_consulta }}</span>
+                      } @else {
+                        <span class="aten-badge">Manual</span>
+                      }
+                    </td>
+                    <td class="text-end">
+                      <button type="button" class="btn btn-outline-primary btn-sm" (click)="verDocumento(d)">
+                        Abrir
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    }
+    @if (tab() === 'agenda') {
+      <div class="ap-agenda-layout">
+        <aside class="ap-agenda-filters">
+          @for (f of filtrosAgenda; track f.id) {
+            <button type="button" class="ap-agenda-filter"
+                    [class.active]="filtroAgenda() === f.id"
+                    (click)="setFiltroAgenda(f.id)">
+              <i class="bi" [ngClass]="f.icon"></i>
+              <span>{{ f.label }}</span>
+            </button>
+          }
+        </aside>
+        <section class="ap-agenda-panel">
+          <div class="ap-section-head">
+            <div>
+              <h5 class="mb-0">{{ tituloAgendaFiltro().titulo }}</h5>
+              <div class="text-muted-erp small">{{ tituloAgendaFiltro().sub }}</div>
+            </div>
+          </div>
+          @if (loadingAgenda()) {
+            <div class="ap-empty-sec">Cargando citas…</div>
+          } @else if (!citasAgendaFiltradas().length) {
+            <div class="ap-placeholder">No hay citas en este filtro.</div>
+          } @else {
+            <div class="table-responsive ap-table-wrap">
+              <table class="table ap-table mb-0">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Hora</th>
+                    <th>Servicio</th>
+                    <th>Profesional</th>
+                    <th>Sede</th>
+                    <th>Estado</th>
+                    <th>Motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (c of citasAgendaFiltradas(); track c.id_cita) {
+                    <tr>
+                      <td class="fw-semibold">{{ fechaAgendaFmt(c) }}</td>
+                      <td>{{ horaRangoCita(c) }}</td>
+                      <td>
+                        <span class="ap-svc-dot"></span>
+                        {{ servicioCita(c) }}
+                      </td>
+                      <td>{{ c.personal || '—' }}</td>
+                      <td>{{ c.sede_nombre || '—' }}</td>
+                      <td>
+                        <span class="aten-badge" [class]="badgeEstadoCita(c.estado)">
+                          {{ labelEstadoCita(c.estado) }}
+                        </span>
+                      </td>
+                      <td class="text-muted">{{ c.notas || c.motivo_cancelacion || '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="ap-agenda-foot">
+              Mostrando {{ citasAgendaFiltradas().length }} de {{ citasPaciente().length }} cita(s)
+            </div>
+          }
+        </section>
+      </div>
+    }
+  }
+</div>
+
+<!-- MODAL SECCIÓN -->
+<ng-template #modalSeccion let-modal>
+  @if (seccionActiva(); as sec) {
+    <div class="modal-header border-0 pb-0">
+      <h5 class="modal-title fw-bold">Agregar {{ sec.titulo }}</h5>
+      <button type="button" class="btn-close" (click)="modal.dismiss()"></button>
+    </div>
+    <div class="modal-body">
+      <form [formGroup]="formModal" class="ap-form-box">
+        <!-- VITALES -->
+        @if (sec.key === 'vitales') {
+          <div class="ap-form-title">Funciones Vitales</div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Frecuencia Cardíaca</label>
+              <div class="input-pill">
+                <input type="number" class="form-control" formControlName="frecuencia_cardiaca" placeholder="lpm">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Frecuencia Respiratoria</label>
+              <div class="input-pill">
+                <input type="number" class="form-control" formControlName="frecuencia_respiratoria" placeholder="rpm">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Presión Arterial Sistólica</label>
+              <div class="input-pill">
+                <input type="number" class="form-control" formControlName="presion_sistolica" placeholder="mmHg">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Presión Arterial Diastólica</label>
+              <div class="input-pill">
+                <input type="number" class="form-control" formControlName="presion_diastolica" placeholder="mmHg">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Temperatura Corporal</label>
+              <div class="input-pill">
+                <input type="number" step="0.1" class="form-control" formControlName="temperatura_c" placeholder="°C">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Saturación de Oxígeno</label>
+              <div class="input-pill">
+                <input type="number" step="0.1" class="form-control" formControlName="saturacion_o2" placeholder="%">
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- PATOLÓGICOS -->
+        @if (sec.key === 'patologicos') {
+          <div class="ap-form-title">Agregar antecedente</div>
+          <div class="row g-3">
+            <div class="col-md-7">
+              <label class="form-label">Descripción</label>
+              <ng-select class="ng-select-sm" [items]="cie10Options()" bindLabel="label"
+                         formControlName="cie10_sel" [searchable]="true" [typeahead]="cie10Typeahead$"
+                         placeholder="Ej: Diabetes tipo 2" appendTo="body" notFoundText="Sin resultados"
+                         (change)="onCie10Select($event)">
+              </ng-select>
+              <input type="text" class="form-control form-control-sm mt-1" formControlName="diagnostico"
+                     placeholder="O escriba el diagnóstico">
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">CIE10</label>
+              <input type="text" class="form-control" formControlName="codigo_cie10" placeholder="Ej: E11">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Fecha de diagnóstico</label>
+              <input type="date" class="form-control" formControlName="fecha_diagnostico">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Observaciones</label>
+              <textarea class="form-control" rows="3" formControlName="observaciones"
+                        placeholder="Escribir aquí..."></textarea>
+            </div>
+            <div class="col-12">
+              <div class="ap-toggle-row">
+                <div>
+                  <div class="fw-semibold">Condición crónica</div>
+                  <small class="text-muted">El paciente tiene actualmente la enfermedad</small>
+                </div>
+                <label class="ap-switch">
+                  <input type="checkbox" formControlName="activo">
+                  <span></span>
+                </label>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="ap-toggle-row">
+                <div>
+                  <div class="fw-semibold">Información dudosa</div>
+                  <small class="text-muted">El paciente no está seguro de la información brindada</small>
+                </div>
+                <label class="ap-switch">
+                  <input type="checkbox" formControlName="informacion_dudosa">
+                  <span></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- ALERGIAS -->
+        @if (sec.key === 'alergias') {
+          <div class="ap-form-title">Agregar alergia</div>
+          <label class="form-label">Alergia</label>
+          <ng-select class="ng-select-sm mb-3" [items]="alergiasCatalogo" bindLabel="nombre" bindValue="id"
+                     formControlName="sustancia" [searchable]="true" placeholder="Seleccionar..."
+                     appendTo="body" notFoundText="Sin opciones"></ng-select>
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control mb-3" rows="3" formControlName="observaciones"></textarea>
+          <div class="ap-toggle-row">
+            <div>
+              <div class="fw-semibold">Información dudosa</div>
+              <small class="text-muted">El paciente no está seguro de la información brindada.</small>
+            </div>
+            <label class="ap-switch">
+              <input type="checkbox" formControlName="informacion_dudosa">
+              <span></span>
+            </label>
+          </div>
+        }
+
+        <!-- MEDIDAS -->
+        @if (sec.key === 'medidas') {
+          <div class="ap-form-title">Medidas</div>
+          <label class="form-label">Peso</label>
+          <div class="input-pill mb-1">
+            <input type="number" step="0.1" class="form-control" formControlName="peso_kg" placeholder="kg">
+          </div>
+          <div class="form-text mb-3">Norma: 1–150 kg</div>
+          <label class="form-label">Talla</label>
+          <div class="input-pill mb-1">
+            <input type="number" step="0.01" class="form-control" formControlName="talla_m" placeholder="m">
+          </div>
+          <div class="form-text mb-3">Norma: 0.5–2.5 m</div>
+          <label class="form-label">IMC</label>
+          <div class="input-pill mb-1 readonly-pill">
+            <i class="bi bi-calculator"></i>
+            <span>{{ calcImcPreview() || 'Valor calculado' }}</span>
+          </div>
+          <div class="form-text mb-3">Completa los campos requeridos para calcular este valor</div>
+          <label class="form-label">Porcentaje de Grasa</label>
+          <div class="input-pill">
+            <input type="number" step="0.1" class="form-control" formControlName="porcentaje_grasa" placeholder="%">
+          </div>
+        }
+
+        <!-- OFTALMOLÓGICOS -->
+        @if (sec.key === 'oftalmologicos') {
+          <div class="ap-form-title">Antecedentes Oftalmológicos</div>
+          <label class="form-label">Nombre <span class="text-danger">*</span></label>
+          <input type="text" class="form-control mb-3" formControlName="nombre"
+                 placeholder="Ej: Miopía, Glaucoma, Cataratas, Retinopatía diabética">
+          <label class="form-label">Comentario</label>
+          <textarea class="form-control mb-3" rows="3" formControlName="comentario"
+                    placeholder="Detallar características, tratamiento recibido, evolución..."></textarea>
+          <div class="ap-toggle-row">
+            <div>
+              <div class="fw-semibold">Información dudosa</div>
+              <small class="text-muted">El paciente no está seguro de la información brindada.</small>
+            </div>
+            <label class="ap-switch">
+              <input type="checkbox" formControlName="informacion_dudosa">
+              <span></span>
+            </label>
+          </div>
+        }
+
+        <!-- GINECO -->
+        @if (sec.key === 'gineco') {
+          <div class="ap-form-title">Agregar antecedente</div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Menarquia</label>
+              <input type="text" class="form-control" formControlName="menarquia_edad">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Régimen catamenial</label>
+              <input type="text" class="form-control" formControlName="regimen_catamenial">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Inicio de relaciones sexuales</label>
+              <input type="text" class="form-control" formControlName="inicio_relaciones_sexuales">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Número de parejas sexuales</label>
+              <input type="text" class="form-control" formControlName="num_parejas_sexuales">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Fecha de última regla</label>
+              <input type="date" class="form-control" formControlName="fur">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Fecha de último PAP</label>
+              <input type="date" class="form-control" formControlName="fecha_ultimo_pap">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Métodos anticonceptivos</label>
+              <input type="text" class="form-control" formControlName="metodo_anticonceptivo">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Otros</label>
+              <textarea class="form-control" rows="3" formControlName="observaciones"
+                        placeholder="Escribe aquí..."></textarea>
+            </div>
+          </div>
+        }
+
+        <!-- FAMILIARES -->
+        @if (sec.key === 'familiares') {
+          <div class="ap-form-title">Agregar antecedente familiar</div>
+          <label class="form-label">Parentesco</label>
+          <ng-select class="ng-select-sm mb-3" [items]="parentescos" bindLabel="nombre" bindValue="id"
+                     formControlName="parentesco" [searchable]="true" placeholder="Seleccionar..."
+                     appendTo="body"></ng-select>
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control mb-3" rows="3" formControlName="observaciones"></textarea>
+          <div class="ap-toggle-row">
+            <div>
+              <div class="fw-semibold">Información dudosa</div>
+              <small class="text-muted">El paciente no está seguro de la información brindada.</small>
+            </div>
+            <label class="ap-switch">
+              <input type="checkbox" formControlName="informacion_dudosa">
+              <span></span>
+            </label>
+          </div>
+        }
+
+        <!-- MEDICACIÓN -->
+        @if (sec.key === 'medicaciones') {
+          <div class="ap-form-title">Agregar medicación</div>
+          <label class="form-label">Medicamento</label>
+          <ng-select class="ng-select-sm mb-2" [items]="medOptions()" bindLabel="nombre"
+                     formControlName="med_sel" [searchable]="true" [typeahead]="medTypeahead$"
+                     placeholder="Buscar..." appendTo="body" notFoundText="Sin resultados"
+                     (change)="onMedSelect($event)"></ng-select>
+          <input type="text" class="form-control mb-3" formControlName="medicamento"
+                 placeholder="O escriba el medicamento">
+          <label class="form-label">Comentario</label>
+          <textarea class="form-control mb-3" rows="3" formControlName="observaciones"></textarea>
+          <div class="ap-toggle-row">
+            <div>
+              <div class="fw-semibold">Información dudosa</div>
+              <small class="text-muted">El paciente no está seguro de la información brindada.</small>
+            </div>
+            <label class="ap-switch">
+              <input type="checkbox" formControlName="informacion_dudosa">
+              <span></span>
+            </label>
+          </div>
+        }
+
+        <!-- EMBARAZO ACTUAL -->
+        @if (sec.key === 'embarazo_actual') {
+          <div class="ap-form-title">Agregar datos del embarazo</div>
+          <label class="form-label">Datos del embarazo</label>
+          <ng-select class="ng-select-sm mb-3" [items]="embarazoDatos" bindLabel="nombre" bindValue="id"
+                     formControlName="dato_embarazo" placeholder="Seleccionar..." appendTo="body"></ng-select>
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control mb-3" rows="3" formControlName="observaciones"
+                    placeholder="Escribe aquí..."></textarea>
+          <div class="ap-toggle-row">
+            <div>
+              <div class="fw-semibold">Información dudosa</div>
+              <small class="text-muted">El paciente no está seguro de la información brindada.</small>
+            </div>
+            <label class="ap-switch">
+              <input type="checkbox" formControlName="informacion_dudosa">
+              <span></span>
+            </label>
+          </div>
+        }
+
+        <!-- NOTAS -->
+        @if (sec.key === 'notas') {
+          <div class="ap-form-title">Nueva Nota</div>
+          <label class="form-label">Contenido</label>
+          <textarea class="form-control" rows="5" formControlName="contenido"
+                    placeholder="Escribe aquí..."></textarea>
+        }
+
+        <!-- PERSONALES -->
+        @if (sec.key === 'personales') {
+          <div class="ap-form-title">Agregar antecedente personal</div>
+          <label class="form-label">Antecedentes</label>
+          <ng-select class="ng-select-sm mb-3" [items]="personalesCatalogo" bindLabel="nombre" bindValue="id"
+                     formControlName="tipo" placeholder="Seleccionar..." appendTo="body"></ng-select>
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control mb-3" rows="3" formControlName="observaciones"
+                    placeholder="Escribe aquí..."></textarea>
+          <div class="ap-toggle-row">
+            <div>
+              <div class="fw-semibold">Información dudosa</div>
+              <small class="text-muted">El paciente no está seguro de la información brindada.</small>
+            </div>
+            <label class="ap-switch">
+              <input type="checkbox" formControlName="informacion_dudosa">
+              <span></span>
+            </label>
+          </div>
+        }
+
+        <!-- QUIRÚRGICOS -->
+        @if (sec.key === 'quirurgicos') {
+          <div class="ap-form-title">Agregar antecedente quirúrgico</div>
+          <label class="form-label">Cirugía</label>
+          <input type="text" class="form-control mb-3" formControlName="procedimiento" placeholder="Escribe aquí">
+          <label class="form-label">Comentario</label>
+          <textarea class="form-control mb-3" rows="3" formControlName="observaciones"
+                    placeholder="Escribe aquí"></textarea>
+          <div class="ap-toggle-row">
+            <div>
+              <div class="fw-semibold">Información dudosa</div>
+              <small class="text-muted">El paciente no está seguro de la información brindada</small>
+            </div>
+            <label class="ap-switch">
+              <input type="checkbox" formControlName="informacion_dudosa">
+              <span></span>
+            </label>
+          </div>
+        }
+
+        <!-- EMBARAZOS HISTORIAL -->
+        @if (sec.key === 'embarazos') {
+          <div class="ap-form-title">Nuevo Embarazo</div>
+          <label class="form-label">Fecha de nacimiento</label>
+          <input type="date" class="form-control mb-3" formControlName="fecha_nacimiento">
+          <label class="form-label">Lugar de nacimiento</label>
+          <input type="text" class="form-control mb-3" formControlName="lugar_nacimiento"
+                 placeholder="Clinica Pepito">
+          <label class="form-label">Peso al nacer</label>
+          <input type="text" class="form-control mb-3" formControlName="peso_al_nacer" placeholder="3.2 kg">
+          <label class="form-label">Edad gestacional al nacer</label>
+          <input type="text" class="form-control mb-3" formControlName="edad_gestacional_nacer"
+                 placeholder="9 meses">
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control mb-3" rows="3" formControlName="observaciones"
+                    placeholder="Escribe aquí..."></textarea>
+          <div class="ap-toggle-row">
+            <div>
+              <div class="fw-semibold">Información dudosa</div>
+              <small class="text-muted">El paciente no está seguro de la información brindada.</small>
+            </div>
+            <label class="ap-switch">
+              <input type="checkbox" formControlName="informacion_dudosa">
+              <span></span>
+            </label>
+          </div>
+        }
+      </form>
+    </div>
+    <div class="modal-footer border-0">
+      <button type="button" class="btn btn-link text-muted" (click)="modal.dismiss()">Cancelar</button>
+      <button type="button" class="btn btn-primary px-4" (click)="completar(modal)">Completar</button>
+    </div>
+  }
+</ng-template>

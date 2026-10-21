@@ -1,17 +1,17 @@
 <!-- LOGO -->
 <div class="sidebar-logo">
-  <div class="d-flex align-items-center gap-2">
+  <div class="sidebar-brand">
     @if (!logoError()) {
-      <img src="assets/img/logo.png" alt="Logo" class="sidebar-logo-img" (error)="logoError.set(true)">
+      <img src="assets/img/logo.png?v=3" alt="Cirugía Plástica López" class="sidebar-logo-img"
+           (error)="logoError.set(true)">
     } @else {
-      <i class="bi bi-geo-alt-fill logo-icon"></i>
+      <div class="logo-fallback">
+        <div class="logo-text">CIRUGÍA PLÁSTICA LÓPEZ</div>
+        <div class="logo-sub">Clínica Especializada & Medical Spa</div>
+      </div>
     }
-    <div>
-      <div class="logo-text">CLÍNICA LÓPEZ</div>
-      <div class="logo-sub">Sistema de gestión</div>
-    </div>
   </div>
-  <button class="btn btn-sm text-white d-lg-none p-0" (click)="layoutService.toggleSidebar()">
+  <button class="btn btn-sm sidebar-close d-lg-none p-0" (click)="layoutService.toggleSidebar()">
     <i class="bi bi-x-lg"></i>
   </button>
 </div>

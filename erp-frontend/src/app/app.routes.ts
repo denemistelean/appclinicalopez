@@ -14,7 +14,7 @@ export const routes: Routes = [
     component: AdminLayout,
     canActivate: [authGuard],
     children: [
-      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      { path: '', redirectTo: 'agenda', pathMatch: 'full' },
 
       {
         path: 'dashboard',
@@ -87,6 +87,15 @@ export const routes: Routes = [
       {
         path: 'historia-clinica',
         loadComponent: () => import('./features/historia-clinica/historia-clinica.component').then(m => m.HistoriaClinicaComponent),
+        canActivate: [permissionGuard],
+        data: { permiso: 'ver_historia_clinica' },
+      },
+      {
+        path: 'atencion-paciente',
+        loadComponent: () =>
+          import('./features/atencion-paciente/atencion-paciente.component').then(
+            (m) => m.AtencionPacienteComponent,
+          ),
         canActivate: [permissionGuard],
         data: { permiso: 'ver_historia_clinica' },
       },

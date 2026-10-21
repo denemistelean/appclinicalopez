@@ -14,6 +14,12 @@ export class ReportesController {
     return this.s.resumen(q);
   }
 
+  @RequirePermissions('REPORTES', 'ver_reporte')
+  @Get('pacientes')
+  pacientes(@Query() q: any) {
+    return this.s.pacientes(q);
+  }
+
   /** Informe integral por paciente (lectura vía permiso de paciente). */
   @RequirePermissions('PACIENTES', 'ver_paciente')
   @Get('paciente/:id')

@@ -80,7 +80,7 @@ export class Login {
         console.log('🔍 Permisos recibidos en Login:', listaPermisos.length);
 
         if (listaPermisos.length > 0) {
-          this.router.navigate(['/dashboard']);
+          this.router.navigate(['/agenda']);
         } else {
           this.rechazarIngreso();
         }

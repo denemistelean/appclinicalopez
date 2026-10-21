@@ -64,13 +64,10 @@ export class Sidebar implements OnInit {
       children: [
         { label: 'Sedes', icon: 'bi-building', route: '/sedes', type: 'link', permiso: 'ver_sede' },
         { label: 'Personal', icon: 'bi-person-badge', route: '/personal', type: 'link', permiso: 'ver_personal' },
-        { label: 'Tratamientos', icon: 'bi-clipboard2-pulse', route: '/tratamientos', type: 'link', permiso: 'ver_tratamiento' },
+        { label: 'Procedimientos', icon: 'bi-clipboard2-pulse', route: '/tratamientos', type: 'link', permiso: 'ver_tratamiento' },
         // Ocultos temporalmente: Inventario, Consentimientos, Fotos evolución, Facturación, Notificaciones
         { label: 'Pacientes', icon: 'bi-person-vcard', route: '/pacientes', type: 'link', permiso: 'ver_paciente' },
         { label: 'Agenda', icon: 'bi-calendar2-week', route: '/agenda', type: 'link', permiso: 'ver_cita' },
-        { label: 'Historia clínica', icon: 'bi-journal-medical', route: '/historia-clinica', type: 'link', permiso: 'ver_historia_clinica' },
-        { label: 'Documentos', icon: 'bi-folder2-open', route: '/documentos', type: 'link', permiso: 'ver_documento' },
-        { label: 'Mapa corporal 3D', icon: 'bi-person-bounding-box', route: '/mapa-corporal', type: 'link', permiso: 'ver_mapa_corporal' },
         { label: 'Reportes', icon: 'bi-graph-up', route: '/reportes', type: 'link', permiso: 'ver_reporte' },
       ],
     },

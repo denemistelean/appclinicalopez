@@ -1,5 +1,22 @@
-import { IsEmail, IsIn, IsOptional, IsString, MaxLength, IsNotEmpty } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  IsNotEmpty,
+} from 'class-validator';
+import { Transform } from 'class-transformer';
 import { PartialType } from '@nestjs/mapped-types';
+
+const toBool = ({ value }: { value: unknown }) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  if (value === 1 || value === '1' || value === 'true' || value === 'TRUE') return true;
+  if (value === 0 || value === '0' || value === 'false' || value === 'FALSE') return false;
+  return Boolean(value);
+};
 
 export class CreateSedeDto {
   @IsString()
@@ -18,6 +35,11 @@ export class CreateSedeDto {
   @IsOptional() dias_atencion?: any;
   @IsOptional() @IsString() @MaxLength(255) logo_url?: string;
   @IsOptional() @IsIn(['ACTIVA', 'INACTIVA']) estado?: string;
+  /** Permite agendar varias citas en el mismo horario */
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  libre_disposicion?: boolean;
 }
 
 export class UpdateSedeDto extends PartialType(CreateSedeDto) {}

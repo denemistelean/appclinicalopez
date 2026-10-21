@@ -2029,3 +2029,14 @@ body.dark-mode .table-pro-container tbody td {
     font-size: 0.8rem;
     line-height: 1.35;
 }
+
+/* Modal detalle de cita (Agenda) — windowClass en body */
+.cita-detalle-modal .modal-content {
+  border: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f4f5f3;
+}
+.cita-detalle-modal .modal-body {
+  padding: 0;
+}

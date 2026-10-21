@@ -21,14 +21,22 @@
           <tr class="main-row align-middle fila-animada">
             <td class="ps-3 py-3"><div class="fw-bold text-primary-erp">#{{ item.id_paciente }}</div></td>
             <td>{{ item.numero_documento }}</td>
-            <td class="fw-bold text-erp text-uppercase">{{ item.nombres }} {{ item.apellidos }}</td>
+            <td class="fw-bold text-erp text-uppercase">
+              <button type="button"
+                      class="btn btn-link p-0 fw-bold text-erp text-uppercase text-decoration-none"
+                      title="Historia clínica"
+                      (click)="verHistoriaClinica(item.id_paciente)">
+                {{ item.nombres }} {{ item.apellidos }}
+              </button>
+            </td>
             <td class="text-muted-erp">{{ item.telefono || '—' }}</td>
             <td class="text-center">
               <span class="badge-erp" [class.badge-success]="item.estado === 'ACTIVO'">{{ item.estado }}</span>
             </td>
             <td class="text-center">
               <div class="d-flex justify-content-center gap-2">
-                <button type="button" class="btn-action-edit" title="Ficha" (click)="verFicha(item.id_paciente)">
+                <button type="button" class="btn-action-edit" title="Historia clínica"
+                        (click)="verHistoriaClinica(item.id_paciente)">
                   <i class="bi bi-folder2-open"></i>
                 </button>
                 @if (perms.hasPermission('actualizar_paciente')) {
@@ -61,59 +69,189 @@
     <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
   </div>
   <div class="modal-body p-4 bg-card">
-    <form [formGroup]="form" class="row g-3">
-      <div class="col-md-3">
-        <label class="form-label">Tipo doc.</label>
-        <input type="text" class="form-control" formControlName="tipo_documento">
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">N° documento <span class="req-star">*</span></label>
-        <input type="text" class="form-control" formControlName="numero_documento">
-        <app-form-error [control]="form.get('numero_documento')"></app-form-error>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">Nombres <span class="req-star">*</span></label>
-        <input type="text" class="form-control text-uppercase" formControlName="nombres"
-               oninput="this.value = this.value.toUpperCase()">
-        <app-form-error [control]="form.get('nombres')"></app-form-error>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">Apellidos <span class="req-star">*</span></label>
-        <input type="text" class="form-control text-uppercase" formControlName="apellidos"
-               oninput="this.value = this.value.toUpperCase()">
-        <app-form-error [control]="form.get('apellidos')"></app-form-error>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Fecha nacimiento</label>
-        <input type="date" class="form-control" formControlName="fecha_nacimiento">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Sexo</label>
-        <ng-select class="ng-select-sm" [items]="sexos" bindLabel="nombre" bindValue="id"
-                   formControlName="sexo" appendTo="body" [clearable]="true"></ng-select>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Teléfono</label>
-        <input type="text" class="form-control" formControlName="telefono">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Email</label>
-        <input type="email" class="form-control" formControlName="email">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Dirección</label>
-        <input type="text" class="form-control" formControlName="direccion">
-      </div>
-      <div class="col-12">
-        <label class="form-label">Observaciones</label>
-        <textarea class="form-control" rows="2" formControlName="observaciones"></textarea>
-      </div>
-    </form>
+    <app-erp-tabs [tabs]="tabs" [activeTab]="activeTab()" (tabChange)="onTabChange($event)"></app-erp-tabs>
+
+    @if (activeTab() === 'datos') {
+      <form [formGroup]="form" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Tipo doc.</label>
+          <input type="text" class="form-control" formControlName="tipo_documento">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">N° documento <span class="req-star">*</span></label>
+          <input type="text" class="form-control" formControlName="numero_documento">
+          <app-form-error [control]="form.get('numero_documento')"></app-form-error>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Nombres <span class="req-star">*</span></label>
+          <input type="text" class="form-control text-uppercase" formControlName="nombres"
+                 oninput="this.value = this.value.toUpperCase()">
+          <app-form-error [control]="form.get('nombres')"></app-form-error>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Apellidos <span class="req-star">*</span></label>
+          <input type="text" class="form-control text-uppercase" formControlName="apellidos"
+                 oninput="this.value = this.value.toUpperCase()">
+          <app-form-error [control]="form.get('apellidos')"></app-form-error>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Fecha nacimiento</label>
+          <input type="date" class="form-control" formControlName="fecha_nacimiento">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Sexo</label>
+          <ng-select class="ng-select-sm" [items]="sexos" bindLabel="nombre" bindValue="id"
+                     formControlName="sexo" appendTo="body" [clearable]="true"></ng-select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Teléfono</label>
+          <input type="text" class="form-control" formControlName="telefono">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Teléfono alterno</label>
+          <input type="text" class="form-control" formControlName="telefono_alterno">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-control" formControlName="email">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Ciudad</label>
+          <input type="text" class="form-control" formControlName="ciudad">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Dirección</label>
+          <input type="text" class="form-control" formControlName="direccion">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Distrito</label>
+          <input type="text" class="form-control" formControlName="distrito">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control" rows="2" formControlName="observaciones"></textarea>
+        </div>
+      </form>
+    }
+
+    @if (activeTab() === 'filiacion') {
+      <form [formGroup]="form" class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Estado civil</label>
+          <ng-select class="ng-select-sm" [items]="estadosCiviles" bindLabel="nombre" bindValue="id"
+                     formControlName="estado_civil" [clearable]="true" appendTo="body"></ng-select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Educación</label>
+          <ng-select class="ng-select-sm" [items]="educaciones" bindLabel="nombre" bindValue="id"
+                     formControlName="educacion" [clearable]="true" appendTo="body"></ng-select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Ocupación</label>
+          <input type="text" class="form-control" formControlName="ocupacion">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Religión</label>
+          <input type="text" class="form-control" formControlName="religion">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Identidad de género</label>
+          <input type="text" class="form-control" formControlName="identidad_genero">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Orientación sexual</label>
+          <input type="text" class="form-control" formControlName="orientacion_sexual">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Idioma</label>
+          <input type="text" class="form-control" formControlName="idioma">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">¿Cómo nos conoció?</label>
+          <input type="text" class="form-control" formControlName="como_nos_conocio">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Grupo sanguíneo</label>
+          <ng-select class="ng-select-sm" [items]="gruposSanguineos" bindLabel="nombre" bindValue="id"
+                     formControlName="grupo_sanguineo" [clearable]="true" appendTo="body"></ng-select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Seguro de salud</label>
+          <input type="text" class="form-control" formControlName="seguro_salud">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">N° de seguro</label>
+          <input type="text" class="form-control" formControlName="numero_seguro">
+        </div>
+      </form>
+    }
+
+    @if (activeTab() === 'emergencia') {
+      @if (!crud.editingId()) {
+        <div class="text-muted-erp small">Guarde primero al paciente para registrar contactos de emergencia.</div>
+      } @else {
+        <form [formGroup]="formContacto" class="row g-2 align-items-end mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Nombre del contacto <span class="req-star">*</span></label>
+            <input type="text" class="form-control" formControlName="nombre">
+            <app-form-error [control]="formContacto.get('nombre')"></app-form-error>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Parentesco</label>
+            <ng-select class="ng-select-sm" [items]="parentescos" bindLabel="nombre" bindValue="id"
+                       formControlName="parentesco" [clearable]="true" appendTo="body"></ng-select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Teléfono</label>
+            <input type="text" class="form-control" formControlName="telefono">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Dirección</label>
+            <input type="text" class="form-control" formControlName="direccion">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Datos adicionales</label>
+            <input type="text" class="form-control" formControlName="datos_adicionales">
+          </div>
+          <div class="col-md-3">
+            <button type="button" class="btn btn-primary w-100" (click)="agregarContacto()">Agregar</button>
+          </div>
+        </form>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Nombre</th><th>Parentesco</th><th>Teléfono</th><th>Dirección</th><th>Datos adicionales</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of contactos(); track c.id_paciente_contacto_emergencia) {
+              <tr>
+                <td class="fw-bold">{{ c.nombre }}</td>
+                <td>{{ c.parentesco || '—' }}</td>
+                <td>{{ c.telefono || '—' }}</td>
+                <td>{{ c.direccion || '—' }}</td>
+                <td>{{ c.datos_adicionales || '—' }}</td>
+                <td>
+                  <button type="button" class="btn-action-delete"
+                          (click)="eliminarContacto(c.id_paciente_contacto_emergencia)">
+                    <i class="bi bi-trash3-fill"></i>
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="text-center text-muted py-3">Sin contactos</td></tr>
+            }
+          </tbody>
+        </table>
+      }
+    }
   </div>
   <div class="modal-footer bg-erp border-top-dashed-erp d-flex justify-content-end gap-2">
     <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">CANCELAR</button>
-    <button type="button" class="btn btn-primary" (click)="guardar()">
-      <i class="bi bi-save me-1"></i> GUARDAR
-    </button>
+    @if (activeTab() === 'datos' || activeTab() === 'filiacion') {
+      <button type="button" class="btn btn-primary" (click)="guardar()">
+        <i class="bi bi-save me-1"></i> GUARDAR
+      </button>
+    }
   </div>
 </ng-template>

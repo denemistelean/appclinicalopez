@@ -125,8 +125,11 @@ export class PacienteFichaComponent implements OnInit {
       fecha_nacimiento: [''],
       sexo: [null],
       telefono: [''],
+      telefono_alterno: [''],
       email: [''],
       direccion: [''],
+      distrito: [''],
+      ciudad: [''],
       observaciones: [''],
     });
     this.formMedida = this.fb.group({
@@ -297,7 +300,10 @@ export class PacienteFichaComponent implements OnInit {
       return;
     }
     this.service.update(this.idPaciente(), this.form.getRawValue()).subscribe({
-      next: () => this.alert.success('Datos actualizados'),
+      next: () => {
+        this.alert.success('Datos actualizados');
+        this.cargar();
+      },
       error: (err: any) => this.alert.error(err.error?.mensaje || 'Error al guardar'),
     });
   }

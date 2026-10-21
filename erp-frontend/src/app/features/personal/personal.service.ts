@@ -52,12 +52,34 @@ export class PersonalService {
     return this.http.get(`${this.apiUrl}/${id}/certificaciones`);
   }
 
-  addCertificacion(id: number, data: any): Observable<any> {
+  addCertificacion(id: number, data: FormData): Observable<any> {
     return this.http.post(`${this.apiUrl}/${id}/certificaciones`, data);
   }
 
   deleteCertificacion(idPersonal: number, idCert: number): Observable<any> {
     return this.http.delete(`${this.apiUrl}/${idPersonal}/certificaciones/${idCert}`);
+  }
+
+  getArchivoCertificacionBlob(idPersonal: number, idCert: number): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/${idPersonal}/certificaciones/${idCert}/archivo`, {
+      responseType: 'blob',
+    });
+  }
+
+  getCredenciales(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/${id}/credenciales`);
+  }
+
+  addCredencial(id: number, data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/${id}/credenciales`, data);
+  }
+
+  updateCredencial(idPersonal: number, idCred: number, data: any): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/${idPersonal}/credenciales/${idCred}`, data);
+  }
+
+  deleteCredencial(idPersonal: number, idCred: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/${idPersonal}/credenciales/${idCred}`);
   }
 
   listEspecialidades(search?: string): Observable<any> {

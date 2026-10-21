@@ -18,7 +18,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       } 
       else if (error.status === 403) {
         // 🔥 AQUÍ ESTÁ EL FIX: Si el backend rechaza, lo pateamos de la pantalla
-        router.navigate(['/dashboard']);
+        router.navigate(['/agenda']);
         alert.error('No tienes permisos suficientes para ver este módulo o realizar esta acción.');
       }
 

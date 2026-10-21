@@ -107,6 +107,12 @@ export class SedesController {
     return this.sedesService.updateEquipo(id, dto, req.user.userId);
   }
 
+  @RequirePermissions('SEDES', 'eliminar_sede')
+  @Delete('equipos/:id')
+  removeEquipo(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.sedesService.removeEquipo(id, req.user.userId);
+  }
+
   @RequirePermissions('SEDES', 'actualizar_sede')
   @Patch('equipos/:id/mantenimiento')
   mantenimiento(

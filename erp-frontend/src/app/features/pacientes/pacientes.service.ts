@@ -72,7 +72,29 @@ export class PacientesService {
     return this.http.delete(`${this.apiUrl}/${id}/${recurso}/${itemId}`);
   }
 
+  setSeccionNoRefiere(id: number, seccion: string, noRefiere: boolean): Observable<any> {
+    return this.http.put(`${this.apiUrl}/${id}/seccion-meta/${seccion}`, {
+      no_refiere: noRefiere,
+    });
+  }
+
   getAlergias(id: number): Observable<any> {
     return this.http.get(`${this.apiUrl}/${id}/alergias`);
+  }
+
+  getContactosEmergencia(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/${id}/contactos-emergencia`);
+  }
+
+  addContactoEmergencia(id: number, data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/${id}/contactos-emergencia`, data);
+  }
+
+  updateContactoEmergencia(id: number, idContacto: number, data: any): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/${id}/contactos-emergencia/${idContacto}`, data);
+  }
+
+  deleteContactoEmergencia(id: number, idContacto: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/${id}/contactos-emergencia/${idContacto}`);
   }
 }

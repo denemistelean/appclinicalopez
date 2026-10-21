@@ -46,6 +46,12 @@ export class ReportesService {
     return this.http.get(`${this.apiUrl}/citas-por-estado`, { params: httpParams });
   }
 
+  getPacientes(page = 1, limit = 10, search = ''): Observable<any> {
+    let params = new HttpParams().set('page', String(page)).set('limit', String(limit));
+    if (search) params = params.set('search', search);
+    return this.http.get(`${this.apiUrl}/pacientes`, { params });
+  }
+
   getInformePaciente(idPaciente: number): Observable<any> {
     return this.http.get(`${this.apiUrl}/paciente/${idPaciente}`);
   }

@@ -4,6 +4,7 @@ export * from './filters/all-exceptions.filter';
 export * from './interceptors/response.interceptor';
 export * from './excel.service';
 export * from './pdf.service';
+export * from './branding.util';
 export * from './upload/upload.service';
 export * from '../auditoria/auditoria.module';
 export * from '../auditoria/auditoria.service';

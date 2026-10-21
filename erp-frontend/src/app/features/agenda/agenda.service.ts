@@ -27,6 +27,15 @@ export class AgendaService {
     });
   }
 
+  semana(desde: string, hasta: string, idSede: number, idPersonal?: number | null): Observable<any> {
+    let params = new HttpParams()
+      .set('desde', desde)
+      .set('hasta', hasta)
+      .set('id_sede', String(idSede));
+    if (idPersonal) params = params.set('id_personal', String(idPersonal));
+    return this.http.get(`${this.apiUrl}/semana`, { params });
+  }
+
   findOne(id: number): Observable<any> {
     return this.http.get(`${this.apiUrl}/citas/${id}`);
   }

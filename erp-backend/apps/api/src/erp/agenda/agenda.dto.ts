@@ -62,11 +62,21 @@ export class CreateCitaDto {
   @IsInt()
   id_personal?: number | null;
 
-  /** Obligatorio solo si el tipo de cita requiere tratamiento */
+  /** Obligatorio solo si el tipo de cita requiere tratamiento (compat / primero de la lista) */
   @IsOptional()
   @Transform(toIntOrNull)
   @IsInt()
   id_tratamiento?: number | null;
+
+  /** Uno o más procedimientos (mismo tipo: quirúrgico o no quirúrgico) */
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (value == null || value === '') return undefined;
+    const arr = Array.isArray(value) ? value : [value];
+    return arr.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
+  })
+  ids_tratamiento?: number[];
 
   @IsOptional()
   @Transform(toIntOrNull)

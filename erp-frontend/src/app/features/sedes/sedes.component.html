@@ -112,6 +112,15 @@
           <label class="form-label">Cierre</label>
           <input type="time" class="form-control" formControlName="horario_cierre">
         </div>
+        <div class="col-12">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sedeLibreDisp" formControlName="libre_disposicion">
+            <label class="form-check-label" for="sedeLibreDisp">
+              Libre disposición (permite citas a la misma hora)
+            </label>
+          </div>
+          <div class="form-text">Si está activo, el personal/sala/equipo de esta sede puede tener varias citas solapadas.</div>
+        </div>
       </form>
     }
 
@@ -120,6 +129,7 @@
         <div class="col-md-4">
           <label class="form-label">Nombre sala <span class="req-star">*</span></label>
           <input type="text" class="form-control" formControlName="nombre">
+          <app-form-error [control]="formSala.get('nombre')"></app-form-error>
         </div>
         <div class="col-md-3">
           <label class="form-label">Capacidad / equipo</label>
@@ -130,25 +140,52 @@
           <ng-select class="ng-select-sm" [items]="estadosSala" bindLabel="nombre" bindValue="id"
                      formControlName="estado" appendTo="body" [clearable]="false"></ng-select>
         </div>
-        <div class="col-md-2">
-          <button type="button" class="btn btn-primary w-100" (click)="agregarSala()">
-            <i class="bi bi-plus-lg"></i> Agregar
-          </button>
+        <div class="col-md-2 d-flex gap-1">
+          @if (editingSalaId()) {
+            <button type="button" class="btn btn-primary flex-grow-1" (click)="guardarSala()"
+                    [disabled]="!perms.hasPermission('actualizar_sede')">
+              <i class="bi bi-check-lg"></i> Guardar
+            </button>
+            <button type="button" class="btn btn-soft-neutral" (click)="cancelarEdicionSala()" title="Cancelar">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          } @else {
+            <button type="button" class="btn btn-primary w-100" (click)="guardarSala()"
+                    [disabled]="!perms.hasPermission('crear_sede') && !perms.hasPermission('actualizar_sede')">
+              <i class="bi bi-plus-lg"></i> Agregar
+            </button>
+          }
         </div>
       </form>
       <div class="table-responsive">
         <table class="table table-sm align-middle">
-          <thead><tr><th>Nombre</th><th>Capacidad</th><th>Estado</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Capacidad</th>
+              <th>Estado</th>
+              <th class="text-end" style="width: 100px;">Acciones</th>
+            </tr>
+          </thead>
           <tbody>
             @for (s of salas(); track s.id_sala) {
-              <tr>
+              <tr [class.table-active]="editingSalaId() === s.id_sala">
                 <td>{{ s.nombre }}</td>
                 <td>{{ s.capacidad_equipo || '—' }}</td>
                 <td>{{ s.estado }}</td>
                 <td class="text-end">
-                  <button type="button" class="btn-action-delete" (click)="eliminarSala(s.id_sala)">
-                    <i class="bi bi-trash3-fill"></i>
-                  </button>
+                  <div class="d-inline-flex gap-1">
+                    @if (perms.hasPermission('actualizar_sede')) {
+                      <button type="button" class="btn-action-edit" (click)="editarSala(s)" title="Editar">
+                        <i class="bi bi-pencil-fill"></i>
+                      </button>
+                    }
+                    @if (perms.hasPermission('eliminar_sede')) {
+                      <button type="button" class="btn-action-delete" (click)="eliminarSala(s.id_sala)" title="Eliminar">
+                        <i class="bi bi-trash3-fill"></i>
+                      </button>
+                    }
+                  </div>
                 </td>
               </tr>
             } @empty {
@@ -164,6 +201,7 @@
         <div class="col-md-3">
           <label class="form-label">Nombre <span class="req-star">*</span></label>
           <input type="text" class="form-control" formControlName="nombre">
+          <app-form-error [control]="formEquipo.get('nombre')"></app-form-error>
         </div>
         <div class="col-md-3">
           <label class="form-label">Tipo de equipo</label>
@@ -180,25 +218,62 @@
           <ng-select class="ng-select-sm" [items]="estadosEquipo" bindLabel="nombre" bindValue="id"
                      formControlName="estado" appendTo="body" [clearable]="false"></ng-select>
         </div>
-        <div class="col-md-2">
-          <button type="button" class="btn btn-primary w-100" (click)="agregarEquipo()">
-            <i class="bi bi-plus-lg"></i> Agregar
-          </button>
+        <div class="col-md-2 d-flex gap-1">
+          @if (editingEquipoId()) {
+            <button type="button" class="btn btn-primary flex-grow-1" (click)="guardarEquipo()"
+                    [disabled]="!perms.hasPermission('actualizar_sede')">
+              <i class="bi bi-check-lg"></i> Guardar
+            </button>
+            <button type="button" class="btn btn-soft-neutral" (click)="cancelarEdicionEquipo()" title="Cancelar">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          } @else {
+            <button type="button" class="btn btn-primary w-100" (click)="guardarEquipo()"
+                    [disabled]="!perms.hasPermission('crear_sede') && !perms.hasPermission('actualizar_sede')">
+              <i class="bi bi-plus-lg"></i> Agregar
+            </button>
+          }
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Fecha adquisición</label>
+          <input type="date" class="form-control" formControlName="fecha_adquisicion">
         </div>
       </form>
       <div class="table-responsive">
         <table class="table table-sm align-middle">
-          <thead><tr><th>Nombre</th><th>Tipo</th><th>Serie</th><th>Estado</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Tipo</th>
+              <th>Serie</th>
+              <th>Estado</th>
+              <th class="text-end" style="width: 100px;">Acciones</th>
+            </tr>
+          </thead>
           <tbody>
             @for (e of equipos(); track e.id_equipo) {
-              <tr>
+              <tr [class.table-active]="editingEquipoId() === e.id_equipo">
                 <td>{{ e.nombre }}</td>
-                <td>{{ e.tipo || e.nombre_tipo || '—' }}</td>
+                <td>{{ e.tipo_nombre || e.tipo || e.nombre_tipo || '—' }}</td>
                 <td>{{ e.numero_serie || '—' }}</td>
                 <td>{{ e.estado }}</td>
+                <td class="text-end">
+                  <div class="d-inline-flex gap-1">
+                    @if (perms.hasPermission('actualizar_sede')) {
+                      <button type="button" class="btn-action-edit" (click)="editarEquipo(e)" title="Editar">
+                        <i class="bi bi-pencil-fill"></i>
+                      </button>
+                    }
+                    @if (perms.hasPermission('eliminar_sede')) {
+                      <button type="button" class="btn-action-delete" (click)="eliminarEquipo(e.id_equipo)" title="Eliminar">
+                        <i class="bi bi-trash3-fill"></i>
+                      </button>
+                    }
+                  </div>
+                </td>
               </tr>
             } @empty {
-              <tr><td colspan="4" class="text-muted text-center py-3">Sin equipos</td></tr>
+              <tr><td colspan="5" class="text-muted text-center py-3">Sin equipos</td></tr>
             }
           </tbody>
         </table>

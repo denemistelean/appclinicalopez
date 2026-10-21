@@ -3,16 +3,22 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  StreamableFile,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
+import { basename, extname, join } from 'path';
 import { DataSource } from 'typeorm';
 import { AuditoriaService } from '@app/common';
 import {
   CreateCertificacionDto,
+  CreateCredencialDto,
   CreateExcepcionDto,
   CreatePersonalDto,
   ReplaceHorarioDto,
   SyncSedesDto,
+  UpdateCredencialDto,
   UpdatePersonalDto,
 } from './personal.dto';
 
@@ -21,7 +27,15 @@ export class PersonalService {
   constructor(
     @InjectDataSource('APP_DB_CONN') private readonly dataSource: DataSource,
     private readonly auditoriaService: AuditoriaService,
+    private readonly config: ConfigService,
   ) {}
+
+  private docsRoot() {
+    return (
+      this.config.get<string>('DOCUMENTOS_ROOT') ||
+      join(process.cwd(), '..', '..', 'storage', 'ClinicaDigital')
+    );
+  }
 
   private pageMeta(page: number, limit: number, total: number) {
     return { total, page, limit, lastPage: Math.max(1, Math.ceil(total / limit)) };
@@ -95,7 +109,46 @@ export class PersonalService {
        ORDER BY e.nombre`,
       [id],
     );
-    return { ...row, sedes, especialidades, ids_especialidad: especialidades.map((e: any) => Number(e.id_especialidad)) };
+    return {
+      ...row,
+      sedes,
+      especialidades,
+      ids_especialidad: especialidades.map((e: any) => Number(e.id_especialidad)),
+      ids_sede: sedes.map((s: any) => Number(s.id_sede)),
+    };
+  }
+
+  private async syncSedesInTx(
+    qr: any,
+    idPersonal: number,
+    sedes: number[],
+    idPrincipal: number | null,
+    userId: number,
+  ) {
+    const unique = [...new Set(sedes.map(Number).filter((n) => Number.isFinite(n) && n > 0))];
+    let principal = idPrincipal && unique.includes(Number(idPrincipal)) ? Number(idPrincipal) : null;
+    if (!principal && unique.length) principal = unique[0];
+
+    await qr.query(
+      `UPDATE cli_personal_sede SET estado_registro = 'ELIMINADO', id_usuario_mod = ?
+       WHERE id_personal = ? AND estado_registro = 'ACTIVO'`,
+      [userId, idPersonal],
+    );
+    for (const idSede of unique) {
+      await qr.query(
+        `INSERT INTO cli_personal_sede (id_personal, id_sede, es_principal, id_usuario_crea)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE es_principal = VALUES(es_principal),
+           estado_registro = 'ACTIVO', id_usuario_mod = ?`,
+        [idPersonal, idSede, principal === idSede ? 1 : 0, userId, userId],
+      );
+    }
+    await qr.query(
+      `UPDATE cli_personal SET id_sede_principal = ?, id_usuario_mod = ?
+       WHERE id_personal = ? AND estado_registro = 'ACTIVO'`,
+      [principal, userId, idPersonal],
+    );
+    return principal;
   }
 
   async listEspecialidades(search?: string) {
@@ -212,12 +265,8 @@ export class PersonalService {
       if (dto.id_sede_principal && !sedes.includes(Number(dto.id_sede_principal))) {
         sedes.push(Number(dto.id_sede_principal));
       }
-      for (const idSede of sedes) {
-        await qr.query(
-          `INSERT INTO cli_personal_sede (id_personal, id_sede, es_principal, id_usuario_crea)
-           VALUES (?, ?, ?, ?)`,
-          [id, idSede, idSede === Number(dto.id_sede_principal) ? 1 : 0, userId],
-        );
+      if (sedes.length) {
+        await this.syncSedesInTx(qr, id, sedes, dto.id_sede_principal || null, userId);
       }
       const idsEsp = Array.isArray(dto.ids_especialidad) ? dto.ids_especialidad : [];
       const labelEsp = await this.syncEspecialidades(qr, id, idsEsp, userId);
@@ -279,6 +328,19 @@ export class PersonalService {
         ],
       );
       if (!res.affectedRows) throw new NotFoundException('Personal no encontrado');
+      if (Array.isArray(dto.sedes)) {
+        const sedes = dto.sedes.map(Number).filter(Boolean);
+        if (dto.id_sede_principal && !sedes.includes(Number(dto.id_sede_principal))) {
+          sedes.push(Number(dto.id_sede_principal));
+        }
+        await this.syncSedesInTx(
+          qr,
+          id,
+          sedes,
+          dto.id_sede_principal !== undefined ? dto.id_sede_principal || null : antiguo.id_sede_principal,
+          userId,
+        );
+      }
       await qr.commitTransaction();
       await this.auditoriaService.registrar('cli_personal', id, 'ACTUALIZAR', userId, antiguo, dto);
       return { message: 'Personal actualizado' };
@@ -438,64 +500,125 @@ export class PersonalService {
   async listCertificaciones(id: number) {
     await this.findOne(id);
     return this.dataSource.query(
-      `SELECT pt.id_personal_tratamiento, pt.id_tratamiento, pt.fecha_certificacion,
-              pt.fecha_vencimiento, pt.observaciones, t.nombre AS tratamiento_nombre
-       FROM cli_personal_tratamiento pt
-       LEFT JOIN cli_tratamiento t ON t.id_tratamiento = pt.id_tratamiento AND t.estado_registro = 'ACTIVO'
-       WHERE pt.id_personal = ? AND pt.estado_registro = 'ACTIVO'
-       ORDER BY t.nombre`,
+      `SELECT id_personal_certificacion, nombre_certificado, fecha_certificacion,
+              fecha_vencimiento, observaciones, archivo_ruta, archivo_nombre, archivo_mime
+       FROM cli_personal_certificacion
+       WHERE id_personal = ? AND estado_registro = 'ACTIVO'
+       ORDER BY COALESCE(fecha_certificacion, '1900-01-01') DESC, id_personal_certificacion DESC`,
       [id],
     );
   }
 
-  async createCertificacion(id: number, dto: CreateCertificacionDto, userId: number) {
+  async createCertificacion(
+    id: number,
+    dto: CreateCertificacionDto,
+    userId: number,
+    file?: Express.Multer.File,
+  ) {
     await this.findOne(id);
-    const idTrat = Number(dto.id_tratamiento);
-    if (!idTrat) throw new BadRequestException('id_tratamiento requerido');
-    const [trat] = await this.dataSource.query(
-      `SELECT id_tratamiento FROM cli_tratamiento WHERE id_tratamiento = ? AND estado_registro = 'ACTIVO'`,
-      [idTrat],
-    );
-    if (!trat) throw new NotFoundException('Tratamiento no encontrado');
+    const nombre = String(dto.nombre_certificado || '').trim();
+    if (!nombre) throw new BadRequestException('Nombre del certificado requerido');
+
+    let archivoRuta: string | null = null;
+    let archivoNombre: string | null = null;
+    let archivoMime: string | null = null;
+    if (file?.buffer?.length) {
+      const saved = this.saveCertificadoPdf(id, file);
+      archivoRuta = saved.ruta;
+      archivoNombre = saved.nombre;
+      archivoMime = saved.mime;
+    }
+
     const res = await this.dataSource.query(
-      `INSERT INTO cli_personal_tratamiento
-        (id_personal, id_tratamiento, fecha_certificacion, fecha_vencimiento, observaciones, id_usuario_crea)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         fecha_certificacion = VALUES(fecha_certificacion),
-         fecha_vencimiento = VALUES(fecha_vencimiento),
-         observaciones = VALUES(observaciones),
-         estado_registro = 'ACTIVO',
-         id_usuario_mod = ?`,
+      `INSERT INTO cli_personal_certificacion
+        (id_personal, nombre_certificado, fecha_certificacion, fecha_vencimiento,
+         observaciones, archivo_ruta, archivo_nombre, archivo_mime, id_usuario_crea)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
-        idTrat,
+        nombre,
         dto.fecha_certificacion || null,
         dto.fecha_vencimiento || null,
         dto.observaciones?.trim() || null,
-        userId,
+        archivoRuta,
+        archivoNombre,
+        archivoMime,
         userId,
       ],
     );
-    const certId = Number(res.insertId) || idTrat;
-    await this.auditoriaService.registrar('cli_personal_tratamiento', certId, 'CREAR', userId, null, dto);
-    return { message: 'Certificación registrada' };
+    const certId = Number(res.insertId);
+    await this.auditoriaService.registrar('cli_personal_certificacion', certId, 'CREAR', userId, null, {
+      nombre_certificado: nombre,
+    });
+    return { id: certId, message: 'Certificación registrada' };
+  }
+
+  private saveCertificadoPdf(idPersonal: number, file: Express.Multer.File) {
+    const ext = extname(file.originalname || '').toLowerCase() || '.pdf';
+    if (ext !== '.pdf') {
+      throw new BadRequestException('Solo se admite PDF del certificado escaneado');
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      throw new BadRequestException('El PDF no debe superar 15 MB');
+    }
+    const relDir = join('PERSONAL', String(idPersonal).padStart(6, '0'), 'CERTIFICACIONES');
+    const absDir = join(this.docsRoot(), relDir);
+    if (!existsSync(absDir)) mkdirSync(absDir, { recursive: true });
+    const safeName = String(file.originalname || 'certificado.pdf')
+      .replace(/[^\w.\- ()áéíóúÁÉÍÓÚñÑ]/g, '_')
+      .slice(0, 120);
+    const filename = `${Date.now()}-${safeName.endsWith('.pdf') ? safeName : safeName + '.pdf'}`;
+    writeFileSync(join(absDir, filename), file.buffer);
+    return {
+      ruta: join(relDir, filename).replace(/\\/g, '/'),
+      nombre: basename(filename),
+      mime: file.mimetype || 'application/pdf',
+    };
+  }
+
+  async streamCertificacion(
+    idPersonal: number,
+    idCert: number,
+  ): Promise<{ file: StreamableFile; mime: string; nombre: string }> {
+    const [row] = await this.dataSource.query(
+      `SELECT * FROM cli_personal_certificacion
+       WHERE id_personal_certificacion = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
+      [idCert, idPersonal],
+    );
+    if (!row?.archivo_ruta) throw new NotFoundException('Archivo no encontrado');
+    const abs = join(this.docsRoot(), row.archivo_ruta);
+    if (!existsSync(abs)) throw new NotFoundException('Archivo no encontrado en disco');
+    return {
+      file: new StreamableFile(createReadStream(abs)),
+      mime: row.archivo_mime || 'application/pdf',
+      nombre: row.archivo_nombre || basename(row.archivo_ruta),
+    };
   }
 
   async removeCertificacion(idPersonal: number, idCert: number, userId: number) {
     const [antiguo] = await this.dataSource.query(
-      `SELECT * FROM cli_personal_tratamiento
-       WHERE id_personal_tratamiento = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
+      `SELECT * FROM cli_personal_certificacion
+       WHERE id_personal_certificacion = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
       [idCert, idPersonal],
     );
     if (!antiguo) throw new NotFoundException('Certificación no encontrada');
     await this.dataSource.query(
-      `UPDATE cli_personal_tratamiento SET estado_registro = 'ELIMINADO', id_usuario_mod = ?
-       WHERE id_personal_tratamiento = ? AND estado_registro = 'ACTIVO'`,
+      `UPDATE cli_personal_certificacion SET estado_registro = 'ELIMINADO', id_usuario_mod = ?
+       WHERE id_personal_certificacion = ? AND estado_registro = 'ACTIVO'`,
       [userId, idCert],
     );
+    if (antiguo.archivo_ruta) {
+      const abs = join(this.docsRoot(), antiguo.archivo_ruta);
+      if (existsSync(abs)) {
+        try {
+          unlinkSync(abs);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     await this.auditoriaService.registrar(
-      'cli_personal_tratamiento',
+      'cli_personal_certificacion',
       idCert,
       'ELIMINAR',
       userId,
@@ -503,6 +626,105 @@ export class PersonalService {
       null,
     );
     return { message: 'Certificación eliminada' };
+  }
+
+  async listCredenciales(id: number) {
+    await this.findOne(id);
+    return this.dataSource.query(
+      `SELECT id_personal_credencial, tipo, numero, entidad,
+              fecha_emision, fecha_vencimiento, observaciones
+       FROM cli_personal_credencial
+       WHERE id_personal = ? AND estado_registro = 'ACTIVO'
+       ORDER BY tipo, numero`,
+      [id],
+    );
+  }
+
+  async createCredencial(id: number, dto: CreateCredencialDto, userId: number) {
+    await this.findOne(id);
+    const tipo = String(dto.tipo || '').trim().toUpperCase();
+    const numero = String(dto.numero || '').trim();
+    if (!tipo || !numero) throw new BadRequestException('Tipo y número de credencial requeridos');
+    const res = await this.dataSource.query(
+      `INSERT INTO cli_personal_credencial
+        (id_personal, tipo, numero, entidad, fecha_emision, fecha_vencimiento, observaciones, id_usuario_crea)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        tipo,
+        numero,
+        dto.entidad?.trim() || null,
+        dto.fecha_emision || null,
+        dto.fecha_vencimiento || null,
+        dto.observaciones?.trim() || null,
+        userId,
+      ],
+    );
+    const credId = Number(res.insertId);
+    await this.auditoriaService.registrar('cli_personal_credencial', credId, 'CREAR', userId, null, {
+      tipo,
+      numero,
+    });
+    return { id: credId, message: 'Credencial registrada' };
+  }
+
+  async updateCredencial(
+    idPersonal: number,
+    idCred: number,
+    dto: UpdateCredencialDto,
+    userId: number,
+  ) {
+    const [antiguo] = await this.dataSource.query(
+      `SELECT * FROM cli_personal_credencial
+       WHERE id_personal_credencial = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
+      [idCred, idPersonal],
+    );
+    if (!antiguo) throw new NotFoundException('Credencial no encontrada');
+    await this.dataSource.query(
+      `UPDATE cli_personal_credencial SET
+         tipo = COALESCE(?, tipo),
+         numero = COALESCE(?, numero),
+         entidad = COALESCE(?, entidad),
+         fecha_emision = COALESCE(?, fecha_emision),
+         fecha_vencimiento = COALESCE(?, fecha_vencimiento),
+         observaciones = COALESCE(?, observaciones),
+         id_usuario_mod = ?
+       WHERE id_personal_credencial = ? AND estado_registro = 'ACTIVO'`,
+      [
+        dto.tipo != null ? String(dto.tipo).trim().toUpperCase() : null,
+        dto.numero != null ? String(dto.numero).trim() : null,
+        dto.entidad !== undefined ? dto.entidad?.trim() || null : null,
+        dto.fecha_emision ?? null,
+        dto.fecha_vencimiento ?? null,
+        dto.observaciones !== undefined ? dto.observaciones?.trim() || null : null,
+        userId,
+        idCred,
+      ],
+    );
+    return { message: 'Credencial actualizada' };
+  }
+
+  async removeCredencial(idPersonal: number, idCred: number, userId: number) {
+    const [antiguo] = await this.dataSource.query(
+      `SELECT * FROM cli_personal_credencial
+       WHERE id_personal_credencial = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
+      [idCred, idPersonal],
+    );
+    if (!antiguo) throw new NotFoundException('Credencial no encontrada');
+    await this.dataSource.query(
+      `UPDATE cli_personal_credencial SET estado_registro = 'ELIMINADO', id_usuario_mod = ?
+       WHERE id_personal_credencial = ? AND estado_registro = 'ACTIVO'`,
+      [userId, idCred],
+    );
+    await this.auditoriaService.registrar(
+      'cli_personal_credencial',
+      idCred,
+      'ELIMINAR',
+      userId,
+      antiguo,
+      null,
+    );
+    return { message: 'Credencial eliminada' };
   }
 
   async disponibilidad(id: number, query: any) {

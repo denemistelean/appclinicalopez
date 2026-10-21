@@ -86,29 +86,46 @@
                  oninput="this.value = this.value.toUpperCase()">
           <app-form-error [control]="form.get('apellidos')"></app-form-error>
         </div>
-          <div class="col-md-8">
-            <label class="form-label">Especialidades</label>
-            <ng-select
-              class="ng-select-sm"
-              [items]="especialidades()"
-              bindLabel="nombre"
-              bindValue="id_especialidad"
-              formControlName="ids_especialidad"
-              [multiple]="true"
-              [searchable]="true"
-              [clearable]="true"
-              [addTag]="crearEspecialidadTag"
-              addTagText="Agregar especialidad"
-              placeholder="Seleccione una o más..."
-              appendTo="body"
-              notFoundText="Sin resultados">
-            </ng-select>
-            <div class="form-text">La agenda valida la cita con estas especialidades (no con un rol ESPECIALISTA).</div>
-          </div>
+        <div class="col-md-6">
+          <label class="form-label">Especialidades</label>
+          <ng-select
+            class="ng-select-sm"
+            [items]="especialidades()"
+            bindLabel="nombre"
+            bindValue="id_especialidad"
+            formControlName="ids_especialidad"
+            [multiple]="true"
+            [searchable]="true"
+            [clearable]="true"
+            [addTag]="crearEspecialidadTag"
+            addTagText="Agregar especialidad"
+            placeholder="Seleccione una o más..."
+            appendTo="body"
+            notFoundText="Sin resultados">
+          </ng-select>
+          <div class="form-text">Puede registrar una o varias especialidades.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Sedes</label>
+          <ng-select
+            class="ng-select-sm"
+            [items]="sedes()"
+            bindLabel="nombre"
+            bindValue="id_sede"
+            formControlName="ids_sede"
+            [multiple]="true"
+            [searchable]="true"
+            [clearable]="true"
+            placeholder="Seleccione una o más sedes..."
+            appendTo="body"
+            notFoundText="Sin resultados">
+          </ng-select>
+          <div class="form-text">El personal puede atender en una o más sedes.</div>
+        </div>
         <div class="col-md-4">
           <label class="form-label">Sede principal</label>
           <ng-select class="ng-select-sm" [items]="sedes()" bindLabel="nombre" bindValue="id_sede"
-                     formControlName="id_sede_principal" placeholder="Buscar sede..." appendTo="body"
+                     formControlName="id_sede_principal" placeholder="Entre las sedes asignadas..." appendTo="body"
                      [searchable]="true" [clearable]="true" notFoundText="Sin resultados"></ng-select>
         </div>
         <div class="col-md-4">
@@ -161,7 +178,7 @@
         <tbody>
           @for (h of horario(); track $index) {
             <tr>
-              <td>{{ h.id_sede }}</td>
+              <td>{{ nombreSede(h.id_sede) }}</td>
               <td>{{ nombreDia(h.dia_semana) }}</td>
               <td>{{ h.hora_inicio }}</td>
               <td>{{ h.hora_fin }}</td>
@@ -208,39 +225,115 @@
     @if (crud.editingId() && activeTab() === 'certificaciones') {
       <form [formGroup]="formCert" class="row g-2 align-items-end mb-3">
         <div class="col-md-5">
-          <label class="form-label">Tratamiento</label>
-          <ng-select class="ng-select-sm" [items]="tratamientos()" bindLabel="nombre" bindValue="id_tratamiento"
-                     formControlName="id_tratamiento" placeholder="Buscar..." appendTo="body"
-                     [searchable]="true" [clearable]="true" notFoundText="Sin resultados"></ng-select>
+          <label class="form-label">Nombre del certificado <span class="req-star">*</span></label>
+          <input type="text" class="form-control" formControlName="nombre_certificado"
+                 placeholder="Ej. Diplomado en Cirugía Facial">
+          <app-form-error [control]="formCert.get('nombre_certificado')"></app-form-error>
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Certificación</label>
+        <div class="col-md-2">
+          <label class="form-label">Fecha</label>
           <input type="date" class="form-control" formControlName="fecha_certificacion">
         </div>
         <div class="col-md-2">
           <label class="form-label">Vence</label>
           <input type="date" class="form-control" formControlName="fecha_vencimiento">
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
+          <label class="form-label">PDF escaneado</label>
+          <input type="file" class="form-control" accept="application/pdf,.pdf" (change)="onCertFileChange($event)">
+          @if (certFileName()) {
+            <div class="form-text text-truncate">{{ certFileName() }}</div>
+          }
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Observaciones</label>
+          <input type="text" class="form-control" formControlName="observaciones">
+        </div>
+        <div class="col-md-4">
           <button type="button" class="btn btn-primary w-100" (click)="agregarCertificacion()">Agregar</button>
         </div>
       </form>
       <table class="table table-sm">
-        <thead><tr><th>Tratamiento</th><th>Fecha</th><th>Vence</th><th></th></tr></thead>
+        <thead><tr><th>Certificado</th><th>Fecha</th><th>Vence</th><th>PDF</th><th></th></tr></thead>
         <tbody>
-          @for (c of certificaciones(); track c.id_personal_tratamiento) {
+          @for (c of certificaciones(); track c.id_personal_certificacion) {
             <tr>
-              <td>{{ c.nombre_tratamiento || c.id_tratamiento }}</td>
+              <td>{{ c.nombre_certificado }}</td>
               <td>{{ c.fecha_certificacion || '—' }}</td>
               <td>{{ c.fecha_vencimiento || '—' }}</td>
               <td>
-                <button type="button" class="btn-action-delete" (click)="eliminarCertificacion(c.id_personal_tratamiento)">
+                @if (c.archivo_ruta) {
+                  <button type="button" class="btn btn-sm btn-soft-neutral" (click)="verArchivoCert(c)">
+                    <i class="bi bi-file-earmark-pdf"></i> Ver
+                  </button>
+                } @else { — }
+              </td>
+              <td>
+                <button type="button" class="btn-action-delete" (click)="eliminarCertificacion(c.id_personal_certificacion)">
                   <i class="bi bi-trash3-fill"></i>
                 </button>
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="4" class="text-center text-muted py-3">Sin certificaciones</td></tr>
+            <tr><td colspan="5" class="text-center text-muted py-3">Sin certificaciones</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (crud.editingId() && activeTab() === 'credenciales') {
+      <form [formGroup]="formCred" class="row g-2 align-items-end mb-3">
+        <div class="col-md-3">
+          <label class="form-label">Tipo <span class="req-star">*</span></label>
+          <ng-select class="ng-select-sm" [items]="tiposCredencial" bindLabel="nombre" bindValue="id"
+                     formControlName="tipo" appendTo="body" [clearable]="false"
+                     (change)="onTipoCredChange($event)"></ng-select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Número <span class="req-star">*</span></label>
+          <input type="text" class="form-control" formControlName="numero" placeholder="Ej. 41034">
+          <app-form-error [control]="formCred.get('numero')"></app-form-error>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Entidad / emisor</label>
+          <input type="text" class="form-control" formControlName="entidad"
+                 placeholder="Ej. Colegio Médico del Perú">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Emisión</label>
+          <input type="date" class="form-control" formControlName="fecha_emision">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Vence</label>
+          <input type="date" class="form-control" formControlName="fecha_vencimiento">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Observaciones</label>
+          <input type="text" class="form-control" formControlName="observaciones">
+        </div>
+        <div class="col-md-4">
+          <button type="button" class="btn btn-primary w-100" (click)="agregarCredencial()">Agregar credencial</button>
+        </div>
+      </form>
+      <div class="form-text mb-2">Puede registrar varias credenciales, incluso del mismo tipo (CMP, RNE, etc.).</div>
+      <table class="table table-sm">
+        <thead><tr><th>Tipo</th><th>Número</th><th>Entidad</th><th>Emisión</th><th>Vence</th><th></th></tr></thead>
+        <tbody>
+          @for (c of credenciales(); track c.id_personal_credencial) {
+            <tr>
+              <td><span class="badge-erp">{{ c.tipo }}</span></td>
+              <td class="fw-bold">{{ c.numero }}</td>
+              <td>{{ c.entidad || '—' }}</td>
+              <td>{{ c.fecha_emision || '—' }}</td>
+              <td>{{ c.fecha_vencimiento || '—' }}</td>
+              <td>
+                <button type="button" class="btn-action-delete" (click)="eliminarCredencial(c.id_personal_credencial)">
+                  <i class="bi bi-trash3-fill"></i>
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="text-center text-muted py-3">Sin credenciales</td></tr>
           }
         </tbody>
       </table>

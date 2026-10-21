@@ -133,12 +133,20 @@ export class AgendaService {
               CONCAT(p.nombres,' ',p.apellidos) paciente,
               t.nombre tratamiento, COALESCE(t.color_agenda, tc.color_agenda) color_agenda, t.categoria,
               tc.nombre tipo_cita, tc.codigo tipo_cita_codigo,
-              CONCAT(pe.nombres,' ',pe.apellidos) personal
+              CONCAT(pe.nombres,' ',pe.apellidos) personal,
+              s.nombre AS sede_nombre,
+              (SELECT cc.id_consulta FROM cli_consulta cc
+                WHERE cc.id_cita=c.id_cita AND cc.estado_registro='ACTIVO'
+                ORDER BY cc.id_consulta DESC LIMIT 1) AS id_consulta,
+              (SELECT cc.estado FROM cli_consulta cc
+                WHERE cc.id_cita=c.id_cita AND cc.estado_registro='ACTIVO'
+                ORDER BY cc.id_consulta DESC LIMIT 1) AS consulta_estado
        FROM cli_cita c
        JOIN cli_paciente p ON p.id_paciente=c.id_paciente
        JOIN cli_personal pe ON pe.id_personal=c.id_personal
        LEFT JOIN cli_tratamiento t ON t.id_tratamiento=c.id_tratamiento
        LEFT JOIN cli_tipo_cita tc ON tc.id_tipo_cita=c.id_tipo_cita
+       LEFT JOIN cli_sede s ON s.id_sede=c.id_sede
        WHERE ${w.join(' AND ')}
        ORDER BY c.fecha_cita DESC, c.hora_inicio
        LIMIT ? OFFSET ?`,
@@ -152,13 +160,19 @@ export class AgendaService {
       `SELECT c.*, t.nombre tratamiento, t.duracion_minutos, t.intervalo_minutos,
               tc.nombre tipo_cita, tc.codigo tipo_cita_codigo,
               tc.requiere_tratamiento, tc.requiere_sala, tc.requiere_equipo,
-              CONCAT(p.nombres,' ',p.apellidos) paciente,
-              CONCAT(pe.nombres,' ',pe.apellidos) personal
+              p.nombres AS paciente_nombres, p.apellidos AS paciente_apellidos,
+              CONCAT(p.apellidos,', ',p.nombres) paciente,
+              COALESCE(p.telefono, p.telefono_alterno) AS paciente_telefono,
+              pe.nombres AS personal_nombres, pe.apellidos AS personal_apellidos,
+              CONCAT(pe.nombres,' ',pe.apellidos) personal,
+              pe.especialidad AS personal_especialidad,
+              s.nombre AS sede_nombre, s.direccion AS sede_direccion
        FROM cli_cita c
        LEFT JOIN cli_tratamiento t ON t.id_tratamiento=c.id_tratamiento
        LEFT JOIN cli_tipo_cita tc ON tc.id_tipo_cita=c.id_tipo_cita
        JOIN cli_paciente p ON p.id_paciente=c.id_paciente
        JOIN cli_personal pe ON pe.id_personal=c.id_personal
+       LEFT JOIN cli_sede s ON s.id_sede=c.id_sede
        WHERE c.id_cita=? AND c.estado_registro='ACTIVO'`,
       [id],
     );
@@ -171,7 +185,20 @@ export class AgendaService {
        WHERE rh.id_cita=? AND rh.estado_registro='ACTIVO'`,
       [id],
     );
-    return { ...r, participantes };
+    const procedimientos = await this.db.query(
+      `SELECT ct.id_tratamiento, t.nombre, t.duracion_minutos, t.tipo_procedimiento
+       FROM cli_cita_tratamiento ct
+       JOIN cli_tratamiento t ON t.id_tratamiento=ct.id_tratamiento
+       WHERE ct.id_cita=? AND ct.estado_registro='ACTIVO'
+       ORDER BY ct.orden, ct.id_cita_tratamiento`,
+      [id],
+    );
+    return {
+      ...r,
+      fecha_cita: this.normalizarFecha(r.fecha_cita),
+      participantes,
+      procedimientos,
+    };
   }
 
   /** Vista día: carriles + citas para timeline multi-recurso */
@@ -210,18 +237,30 @@ export class AgendaService {
     );
 
     const citas = await this.db.query(
-      `SELECT c.id_cita, c.id_paciente, c.id_personal, c.id_tratamiento, c.id_tipo_cita,
-              c.id_sala, c.id_equipo,
+      `SELECT c.id_cita, c.id_paciente, c.id_personal, c.id_sede, c.id_tratamiento, c.id_tipo_cita,
+              c.id_sala, c.id_equipo, c.notas,
               c.fecha_cita, c.hora_inicio, c.hora_fin, c.hora_fin_recurso, c.estado,
-              CONCAT(pa.nombres,' ',pa.apellidos) paciente,
+              (SELECT cc.id_consulta FROM cli_consulta cc
+                WHERE cc.id_cita=c.id_cita AND cc.estado_registro='ACTIVO'
+                ORDER BY cc.id_consulta DESC LIMIT 1) AS id_consulta,
+              (SELECT cc.estado FROM cli_consulta cc
+                WHERE cc.id_cita=c.id_cita AND cc.estado_registro='ACTIVO'
+                ORDER BY cc.id_consulta DESC LIMIT 1) AS consulta_estado,
+              pa.nombres AS paciente_nombres, pa.apellidos AS paciente_apellidos,
+              CONCAT(pa.apellidos,', ',pa.nombres) paciente,
+              COALESCE(pa.telefono, pa.telefono_alterno) AS paciente_telefono,
               COALESCE(t.nombre, tc.nombre, 'Cita') tratamiento,
+              COALESCE(t.duracion_minutos, tc.duracion_default_minutos, 30) AS duracion_minutos,
               COALESCE(t.color_agenda, tc.color_agenda, '#5B6960') color_agenda,
               COALESCE(t.intervalo_minutos, 0) AS buffer_minutos,
               tc.nombre tipo_cita, tc.codigo tipo_cita_codigo,
-              CONCAT(pe.nombres,' ',pe.apellidos) personal
+              CONCAT(pe.nombres,' ',pe.apellidos) personal,
+              pe.especialidad AS personal_especialidad,
+              s.nombre AS sede_nombre, s.direccion AS sede_direccion
        FROM cli_cita c
        JOIN cli_paciente pa ON pa.id_paciente=c.id_paciente
        JOIN cli_personal pe ON pe.id_personal=c.id_personal
+       LEFT JOIN cli_sede s ON s.id_sede=c.id_sede
        LEFT JOIN cli_tratamiento t ON t.id_tratamiento=c.id_tratamiento
        LEFT JOIN cli_tipo_cita tc ON tc.id_tipo_cita=c.id_tipo_cita
        WHERE c.id_sede=? AND c.fecha_cita=? AND c.estado_registro='ACTIVO'
@@ -254,7 +293,7 @@ export class AgendaService {
     return {
       fecha,
       id_sede: idSede,
-      day_start: '09:00',
+      day_start: '08:00',
       day_end: '19:00',
       lanes: [
         { group: 'Profesionales', items: profesionales },
@@ -263,12 +302,115 @@ export class AgendaService {
       ],
       citas: citas.map((c: any) => ({
         ...c,
+        fecha_cita: this.normalizarFecha(c.fecha_cita),
         participantes: byCita.get(Number(c.id_cita)) || [],
         hora_fin_recurso:
           c.hora_fin_recurso ||
           this.sumarMinutos(c.hora_fin, Number(c.buffer_minutos || 0)),
       })),
     };
+  }
+
+  /** Vista semana: citas entre desde/hasta para una sede (opcionalmente un personal). */
+  async semana(q: any) {
+    const desde = String(q.desde || '').slice(0, 10);
+    const hasta = String(q.hasta || '').slice(0, 10);
+    const idSede = Number(q.id_sede);
+    const idPersonal = q.id_personal != null && q.id_personal !== '' ? Number(q.id_personal) : null;
+    if (!desde || !hasta || !idSede) {
+      throw new BadRequestException('desde, hasta e id_sede requeridos');
+    }
+
+    const profesionales = await this.db.query(
+      `SELECT p.id_personal AS id, CONCAT(p.nombres,' ',p.apellidos) AS nombre,
+              p.especialidad AS rol, 'prof' AS kind
+       FROM cli_personal p
+       WHERE p.estado='ACTIVO' AND p.estado_registro='ACTIVO'
+         AND (
+           p.id_sede_principal=?
+           OR EXISTS (
+             SELECT 1 FROM cli_personal_sede ps
+             WHERE ps.id_personal=p.id_personal AND ps.id_sede=? AND ps.estado_registro='ACTIVO'
+           )
+         )
+       ORDER BY p.apellidos, p.nombres`,
+      [idSede, idSede],
+    );
+
+    const params: any[] = [idSede, desde, hasta];
+    let filtroPers = '';
+    if (idPersonal) {
+      filtroPers = ` AND (c.id_personal=? OR EXISTS (
+        SELECT 1 FROM cli_cita_recurso_humano rh
+        WHERE rh.id_cita=c.id_cita AND rh.id_personal=? AND rh.estado_registro='ACTIVO'
+      ))`;
+      params.push(idPersonal, idPersonal);
+    }
+
+    const citas = await this.db.query(
+      `SELECT c.id_cita, c.id_paciente, c.id_personal, c.id_sede, c.id_tratamiento, c.id_tipo_cita,
+              c.id_sala, c.id_equipo, c.notas,
+              c.fecha_cita, c.hora_inicio, c.hora_fin, c.hora_fin_recurso, c.estado,
+              (SELECT cc.id_consulta FROM cli_consulta cc
+                WHERE cc.id_cita=c.id_cita AND cc.estado_registro='ACTIVO'
+                ORDER BY cc.id_consulta DESC LIMIT 1) AS id_consulta,
+              (SELECT cc.estado FROM cli_consulta cc
+                WHERE cc.id_cita=c.id_cita AND cc.estado_registro='ACTIVO'
+                ORDER BY cc.id_consulta DESC LIMIT 1) AS consulta_estado,
+              pa.nombres AS paciente_nombres, pa.apellidos AS paciente_apellidos,
+              CONCAT(pa.apellidos,', ',pa.nombres) paciente,
+              COALESCE(pa.telefono, pa.telefono_alterno) AS paciente_telefono,
+              COALESCE(t.nombre, tc.nombre, 'Cita') tratamiento,
+              COALESCE(t.duracion_minutos, tc.duracion_default_minutos, 30) AS duracion_minutos,
+              COALESCE(t.color_agenda, tc.color_agenda, '#5B6960') color_agenda,
+              COALESCE(t.intervalo_minutos, 0) AS buffer_minutos,
+              tc.nombre tipo_cita, tc.codigo tipo_cita_codigo,
+              CONCAT(pe.nombres,' ',pe.apellidos) personal,
+              pe.especialidad AS personal_especialidad,
+              s.nombre AS sede_nombre, s.direccion AS sede_direccion
+       FROM cli_cita c
+       JOIN cli_paciente pa ON pa.id_paciente=c.id_paciente
+       JOIN cli_personal pe ON pe.id_personal=c.id_personal
+       LEFT JOIN cli_sede s ON s.id_sede=c.id_sede
+       LEFT JOIN cli_tratamiento t ON t.id_tratamiento=c.id_tratamiento
+       LEFT JOIN cli_tipo_cita tc ON tc.id_tipo_cita=c.id_tipo_cita
+       WHERE c.id_sede=? AND c.fecha_cita BETWEEN ? AND ?
+         AND c.estado_registro='ACTIVO'
+         AND c.estado NOT IN ('CANCELADA','NO_ASISTIO')
+         ${filtroPers}
+       ORDER BY c.fecha_cita, c.hora_inicio`,
+      params,
+    );
+
+    return {
+      desde,
+      hasta,
+      id_sede: idSede,
+      id_personal: idPersonal,
+      day_start: '08:00',
+      day_end: '19:00',
+      profesionales,
+      citas: citas.map((c: any) => ({
+        ...c,
+        fecha_cita: this.normalizarFecha(c.fecha_cita),
+        hora_fin_recurso:
+          c.hora_fin_recurso ||
+          this.sumarMinutos(c.hora_fin, Number(c.buffer_minutos || 0)),
+      })),
+    };
+  }
+
+  private normalizarFecha(v: any): string {
+    if (!v) return '';
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      const y = v.getFullYear();
+      const m = String(v.getMonth() + 1).padStart(2, '0');
+      const d = String(v.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    const s = String(v);
+    const m = s.match(/(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : s.slice(0, 10);
   }
 
   // ---------------------------------------------------------------------------
@@ -294,11 +436,18 @@ export class AgendaService {
     if (!tipo) throw new BadRequestException('Tipo de cita no válido');
 
     const requiereTrat = !!Number(tipo.requiere_tratamiento);
-    let idTrat = d.id_tratamiento ? Number(d.id_tratamiento) : null;
+    const idsTratRaw: number[] = Array.isArray(d.ids_tratamiento)
+      ? d.ids_tratamiento.map(Number).filter((n: number) => Number.isFinite(n) && n > 0)
+      : [];
+    if (!idsTratRaw.length && d.id_tratamiento) idsTratRaw.push(Number(d.id_tratamiento));
+    // únicos preservando orden
+    const idsTrat = [...new Set(idsTratRaw)];
+    let idTrat: number | null = idsTrat[0] || null;
     let t: any = null;
+    let tratamientos: any[] = [];
 
     if (requiereTrat) {
-      if (!idTrat) {
+      if (!idsTrat.length) {
         return {
           ok: false,
           valida: false,
@@ -306,7 +455,7 @@ export class AgendaService {
             {
               pass: false,
               codigo: 'TRATAMIENTO',
-              msg: `El tipo "${tipo.nombre}" requiere tratamiento.`,
+              msg: `El tipo "${tipo.nombre}" requiere al menos un procedimiento.`,
             },
           ],
           warnings: [],
@@ -314,22 +463,55 @@ export class AgendaService {
           participantes: [],
           hora_fin: null,
           hora_fin_recurso: null,
-          hard: { codigo: 'TRATAMIENTO', mensaje: 'Tratamiento requerido' },
+          hard: { codigo: 'TRATAMIENTO', mensaje: 'Procedimiento requerido' },
           tipo,
         };
       }
-      [t] = await this.db.query(
-        `SELECT * FROM cli_tratamiento WHERE id_tratamiento=? AND estado='ACTIVO' AND estado_registro='ACTIVO'`,
-        [idTrat],
+      tratamientos = await this.db.query(
+        `SELECT * FROM cli_tratamiento
+         WHERE id_tratamiento IN (${idsTrat.map(() => '?').join(',')})
+           AND estado='ACTIVO' AND estado_registro='ACTIVO'`,
+        idsTrat,
       );
-      if (!t) throw new BadRequestException('Tratamiento no disponible');
+      if (tratamientos.length !== idsTrat.length) {
+        throw new BadRequestException('Uno o más procedimientos no están disponibles');
+      }
+      const tiposProc = new Set(
+        tratamientos.map((x: any) => String(x.tipo_procedimiento || '').toUpperCase()).filter(Boolean),
+      );
+      if (tiposProc.size > 1) {
+        return {
+          ok: false,
+          valida: false,
+          steps: [
+            {
+              pass: false,
+              codigo: 'TRATAMIENTO',
+              msg: 'Solo puede combinar procedimientos del mismo tipo (quirúrgicos o no quirúrgicos).',
+            },
+          ],
+          warnings: [],
+          assignedProf: null,
+          participantes: [],
+          hora_fin: null,
+          hora_fin_recurso: null,
+          hard: { codigo: 'TRATAMIENTO', mensaje: 'Tipos de procedimiento mixtos' },
+          tipo,
+        };
+      }
+      // orden según idsTrat
+      const byId = new Map(tratamientos.map((x: any) => [Number(x.id_tratamiento), x]));
+      tratamientos = idsTrat.map((id) => byId.get(id)).filter(Boolean);
+      t = tratamientos[0];
+      idTrat = Number(t.id_tratamiento);
       steps.push({
         pass: true,
         codigo: 'TIPO',
-        msg: `Tipo: ${tipo.nombre} (con tratamiento).`,
+        msg: `Tipo: ${tipo.nombre} (${tratamientos.length} procedimiento${tratamientos.length > 1 ? 's' : ''}).`,
       });
     } else {
       idTrat = null;
+      idsTrat.length = 0;
       steps.push({
         pass: true,
         codigo: 'TIPO',
@@ -337,8 +519,13 @@ export class AgendaService {
       });
     }
 
-    const duracion = Number(t?.duracion_minutos || tipo.duracion_default_minutos || 30);
-    const buffer = Number(t?.intervalo_minutos || 0);
+    const duracion = tratamientos.length
+      ? tratamientos.reduce((acc: number, x: any) => acc + Number(x.duracion_minutos || 0), 0)
+      : Number(tipo.duracion_default_minutos || 30);
+    const buffer = tratamientos.reduce(
+      (acc: number, x: any) => acc + Number(x.intervalo_minutos || 0),
+      0,
+    );
     const horaFin = d.hora_fin || this.sumarMinutos(horaInicio, duracion);
     const horaFinRecurso = this.sumarMinutos(horaFin, buffer);
     const startM = this.toMin(horaInicio);
@@ -397,7 +584,7 @@ export class AgendaService {
         );
       }
       for (const cand of candidatos) {
-        if (await this.personalLibre(cand.id_personal, fecha, startM, endProfM, excludeId)) {
+        if (await this.personalLibre(cand.id_personal, fecha, startM, endProfM, excludeId, idSede)) {
           assignedProf = Number(cand.id_personal);
           break;
         }
@@ -446,7 +633,7 @@ export class AgendaService {
         }
       }
       if (personalOk) {
-        const libre = await this.personalLibre(idPersonal, fecha, startM, endProfM, excludeId);
+        const libre = await this.personalLibre(idPersonal, fecha, startM, endProfM, excludeId, idSede);
         if (!libre) {
           ok = false;
           steps.push({
@@ -511,7 +698,7 @@ export class AgendaService {
           [rol.id_rol_recurso, fecha, assignedProf, assignedProf],
         );
         for (const c of cands) {
-          if (await this.personalLibre(c.id_personal, fecha, startM, endProfM, excludeId)) {
+          if (await this.personalLibre(c.id_personal, fecha, startM, endProfM, excludeId, idSede)) {
             idPersRol = Number(c.id_personal);
             break;
           }
@@ -550,7 +737,7 @@ export class AgendaService {
         });
         continue;
       }
-      if (!(await this.personalLibre(idPersRol, fecha, startM, endProfM, excludeId))) {
+      if (!(await this.personalLibre(idPersRol, fecha, startM, endProfM, excludeId, idSede))) {
         ok = false;
         steps.push({
           pass: false,
@@ -586,7 +773,7 @@ export class AgendaService {
         if (!s) {
           ok = false;
           steps.push({ pass: false, codigo: 'SALA', msg: 'Sala no disponible en la sede.' });
-        } else if (!(await this.salaLibre(idSala, fecha, startM, endResM, excludeId))) {
+        } else if (!(await this.salaLibre(idSala, fecha, startM, endResM, excludeId, idSede))) {
           ok = false;
           steps.push({
             pass: false,
@@ -607,7 +794,7 @@ export class AgendaService {
       if (!s) {
         ok = false;
         steps.push({ pass: false, codigo: 'SALA', msg: 'Sala no disponible en la sede.' });
-      } else if (!(await this.salaLibre(idSala, fecha, startM, endResM, excludeId))) {
+      } else if (!(await this.salaLibre(idSala, fecha, startM, endResM, excludeId, idSede))) {
         ok = false;
         steps.push({
           pass: false,
@@ -650,7 +837,7 @@ export class AgendaService {
         if (!e) {
           ok = false;
           steps.push({ pass: false, codigo: 'EQUIPO', msg: 'Equipo no disponible.' });
-        } else if (!(await this.equipoLibre(idEquipo, fecha, startM, endResM, excludeId))) {
+        } else if (!(await this.equipoLibre(idEquipo, fecha, startM, endResM, excludeId, idSede))) {
           ok = false;
           steps.push({
             pass: false,
@@ -671,7 +858,7 @@ export class AgendaService {
       if (!e) {
         ok = false;
         steps.push({ pass: false, codigo: 'EQUIPO', msg: 'Equipo no disponible.' });
-      } else if (!(await this.equipoLibre(idEquipo, fecha, startM, endResM, excludeId))) {
+      } else if (!(await this.equipoLibre(idEquipo, fecha, startM, endResM, excludeId, idSede))) {
         ok = false;
         steps.push({
           pass: false,
@@ -821,7 +1008,9 @@ export class AgendaService {
       participantes: participantesResolved,
       hora_fin: horaFin,
       hora_fin_recurso: horaFinRecurso,
+      duracion_minutos: duracion,
       id_tratamiento: idTrat,
+      ids_tratamiento: idsTrat,
       id_sala: idSala,
       id_equipo: idEquipo,
       id_tipo_cita: idTipo,
@@ -830,13 +1019,26 @@ export class AgendaService {
     };
   }
 
+  /** Si la sede permite solapes (libre disposición), no bloquear por ocupación. */
+  private async sedePermiteSolape(idSede: number | null | undefined): Promise<boolean> {
+    if (!idSede) return false;
+    const [row] = await this.db.query(
+      `SELECT libre_disposicion FROM cli_sede
+       WHERE id_sede=? AND estado_registro='ACTIVO' LIMIT 1`,
+      [Number(idSede)],
+    );
+    return !!(row && Number(row.libre_disposicion) === 1);
+  }
+
   private async personalLibre(
     idPersonal: number,
     fecha: string,
     startM: number,
     endM: number,
     excludeId?: number,
+    idSede?: number | null,
   ) {
+    if (await this.sedePermiteSolape(idSede)) return true;
     const citas = await this.db.query(
       `SELECT hora_inicio, hora_fin FROM cli_cita
        WHERE fecha_cita=? AND estado_registro='ACTIVO'
@@ -873,7 +1075,9 @@ export class AgendaService {
     startM: number,
     endResM: number,
     excludeId?: number,
+    idSede?: number | null,
   ) {
+    if (await this.sedePermiteSolape(idSede)) return true;
     const citas = await this.db.query(
       `SELECT hora_inicio, COALESCE(hora_fin_recurso, hora_fin) AS fin FROM cli_cita
        WHERE fecha_cita=? AND id_sala=? AND estado_registro='ACTIVO'
@@ -892,7 +1096,9 @@ export class AgendaService {
     startM: number,
     endResM: number,
     excludeId?: number,
+    idSede?: number | null,
   ) {
+    if (await this.sedePermiteSolape(idSede)) return true;
     const citas = await this.db.query(
       `SELECT hora_inicio, COALESCE(hora_fin_recurso, hora_fin) AS fin FROM cli_cita
        WHERE fecha_cita=? AND id_equipo=? AND estado_registro='ACTIVO'
@@ -992,9 +1198,18 @@ export class AgendaService {
         );
       }
 
+      await this.syncCitaTratamientos(qr, id, v.ids_tratamiento || [], userId);
+
       await qr.commitTransaction();
       await this.auditoria.registrar('cli_cita', id, 'CREAR', userId, null, d);
-      return { id, message: 'Cita creada', warnings: v.warnings, steps: v.steps };
+      return {
+        id,
+        message: 'Cita creada',
+        warnings: v.warnings,
+        steps: v.steps,
+        hora_fin: v.hora_fin,
+        duracion_minutos: v.duracion_minutos,
+      };
     } catch (e) {
       await qr.rollbackTransaction();
       throw e;
@@ -1061,7 +1276,36 @@ export class AgendaService {
       );
     }
 
+    await this.syncCitaTratamientos(this.db, id, v.ids_tratamiento || [], userId);
+
     return { message: 'Cita actualizada', warnings: v.warnings, steps: v.steps };
+  }
+
+  /** Persiste N procedimientos de la cita (soft-delete + reinsert). */
+  private async syncCitaTratamientos(
+    runner: { query: (sql: string, params?: any[]) => Promise<any> },
+    idCita: number,
+    ids: number[],
+    userId: number,
+  ) {
+    await runner.query(
+      `UPDATE cli_cita_tratamiento SET estado_registro='ELIMINADO', id_usuario_mod=?
+       WHERE id_cita=? AND estado_registro='ACTIVO'`,
+      [userId, idCita],
+    );
+    let orden = 1;
+    for (const idTrat of ids) {
+      await runner.query(
+        `INSERT INTO cli_cita_tratamiento
+          (id_cita, id_tratamiento, orden, id_usuario_crea)
+         VALUES (?,?,?,?)
+         ON DUPLICATE KEY UPDATE
+           orden=VALUES(orden),
+           estado_registro='ACTIVO',
+           id_usuario_mod=?`,
+        [idCita, idTrat, orden++, userId, userId],
+      );
+    }
   }
 
   async cancelar(id: number, d: CancelarCitaDto, userId: number) {
@@ -1306,7 +1550,10 @@ export class AgendaService {
     return this.db.query(
       `SELECT id_tipo_cita, codigo, nombre, descripcion, duracion_default_minutos,
               requiere_tratamiento, requiere_sala, requiere_equipo, requiere_certificacion, color_agenda
-       FROM cli_tipo_cita WHERE estado_registro='ACTIVO' ORDER BY nombre`,
+       FROM cli_tipo_cita
+       WHERE estado_registro='ACTIVO'
+         AND codigo IN ('CONSULTA','SEGUIMIENTO','PROCEDIMIENTO')
+       ORDER BY FIELD(codigo,'CONSULTA','SEGUIMIENTO','PROCEDIMIENTO'), nombre`,
     );
   }
 

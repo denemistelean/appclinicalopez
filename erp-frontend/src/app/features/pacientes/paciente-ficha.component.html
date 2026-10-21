@@ -24,6 +24,10 @@
 
     @if (activeTab() === 'datos') {
       <form [formGroup]="form" class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Tipo doc.</label>
+          <input type="text" class="form-control" formControlName="tipo_documento">
+        </div>
         <div class="col-md-3">
           <label class="form-label">N° documento <span class="req-star">*</span></label>
           <input type="text" class="form-control" formControlName="numero_documento">
@@ -31,32 +35,46 @@
         </div>
         <div class="col-md-3">
           <label class="form-label">Nombres <span class="req-star">*</span></label>
-          <input type="text" class="form-control text-uppercase" formControlName="nombres">
+          <input type="text" class="form-control text-uppercase" formControlName="nombres"
+                 oninput="this.value = this.value.toUpperCase()">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Apellidos <span class="req-star">*</span></label>
+          <input type="text" class="form-control text-uppercase" formControlName="apellidos"
+                 oninput="this.value = this.value.toUpperCase()">
         </div>
         <div class="col-md-3">
-          <label class="form-label">Apellidos <span class="req-star">*</span></label>
-          <input type="text" class="form-control text-uppercase" formControlName="apellidos">
+          <label class="form-label">Fecha nacimiento</label>
+          <input type="date" class="form-control" formControlName="fecha_nacimiento">
         </div>
         <div class="col-md-3">
           <label class="form-label">Sexo</label>
           <ng-select class="ng-select-sm" [items]="sexos" bindLabel="nombre" bindValue="id"
                      formControlName="sexo" [clearable]="true" appendTo="body"></ng-select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label class="form-label">Teléfono</label>
           <input type="text" class="form-control" formControlName="telefono">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Teléfono alterno</label>
+          <input type="text" class="form-control" formControlName="telefono_alterno">
         </div>
         <div class="col-md-4">
           <label class="form-label">Email</label>
           <input type="email" class="form-control" formControlName="email">
         </div>
-        <div class="col-md-4">
-          <label class="form-label">Fecha nacimiento</label>
-          <input type="date" class="form-control" formControlName="fecha_nacimiento">
-        </div>
-        <div class="col-12">
+        <div class="col-md-8">
           <label class="form-label">Dirección</label>
           <input type="text" class="form-control" formControlName="direccion">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Distrito</label>
+          <input type="text" class="form-control" formControlName="distrito">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Ciudad</label>
+          <input type="text" class="form-control" formControlName="ciudad">
         </div>
         <div class="col-12">
           <label class="form-label">Observaciones</label>

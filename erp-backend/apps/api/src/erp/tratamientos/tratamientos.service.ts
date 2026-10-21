@@ -34,6 +34,7 @@ export class TratamientosService {
     const search = String(query.search || '').trim();
     const idSede = query.id_sede ? Number(query.id_sede) : null;
     const categoria = query.categoria ? String(query.categoria) : null;
+    const tipoProc = query.tipo_procedimiento ? String(query.tipo_procedimiento) : null;
     const estado = query.estado ? String(query.estado) : null;
 
     const where: string[] = [`t.estado_registro = 'ACTIVO'`];
@@ -46,6 +47,10 @@ export class TratamientosService {
     if (categoria) {
       where.push(`t.categoria = ?`);
       params.push(categoria);
+    }
+    if (tipoProc) {
+      where.push(`t.tipo_procedimiento = ?`);
+      params.push(tipoProc);
     }
     if (estado) {
       where.push(`t.estado = ?`);
@@ -65,11 +70,12 @@ export class TratamientosService {
       params,
     );
     const data = await this.dataSource.query(
-      `SELECT t.id_tratamiento, t.codigo, t.nombre, t.categoria, t.duracion_minutos,
-              t.precio_base, t.requiere_equipo, t.requiere_sala, t.intervalo_minutos, t.estado
+      `SELECT t.id_tratamiento, t.codigo, t.nombre, t.categoria, t.tipo_procedimiento,
+              t.duracion_minutos, t.precio_base, t.requiere_equipo, t.requiere_sala,
+              t.intervalo_minutos, t.estado
        FROM cli_tratamiento t
        WHERE ${sqlWhere}
-       ORDER BY t.nombre ASC
+       ORDER BY t.tipo_procedimiento ASC, t.nombre ASC
        LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     );
@@ -117,16 +123,19 @@ export class TratamientosService {
     await qr.connect();
     await qr.startTransaction();
     try {
+      const tipoProc = dto.tipo_procedimiento || null;
+      const categoria = dto.categoria?.trim() || tipoProc || null;
       const res = await qr.query(
         `INSERT INTO cli_tratamiento
-          (codigo, nombre, descripcion, categoria, id_especialidad, duracion_minutos, precio_base,
+          (codigo, nombre, descripcion, categoria, tipo_procedimiento, id_especialidad, duracion_minutos, precio_base,
            requiere_equipo, requiere_sala, id_tipo_equipo, intervalo_minutos, estado, id_usuario_crea)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dto.codigo?.trim() || null,
           nombre,
           dto.descripcion?.trim() || null,
-          dto.categoria?.trim() || null,
+          categoria,
+          tipoProc,
           dto.id_especialidad || null,
           dto.duracion_minutos || 30,
           dto.precio_base ?? 0,
@@ -184,6 +193,7 @@ export class TratamientosService {
         nombre = COALESCE(?, nombre),
         descripcion = COALESCE(?, descripcion),
         categoria = COALESCE(?, categoria),
+        tipo_procedimiento = COALESCE(?, tipo_procedimiento),
         id_especialidad = COALESCE(?, id_especialidad),
         duracion_minutos = COALESCE(?, duracion_minutos),
         precio_base = COALESCE(?, precio_base),
@@ -199,6 +209,7 @@ export class TratamientosService {
         dto.nombre != null ? dto.nombre.trim().toUpperCase() : null,
         dto.descripcion !== undefined ? dto.descripcion?.trim() || null : null,
         dto.categoria !== undefined ? dto.categoria?.trim() || null : null,
+        dto.tipo_procedimiento !== undefined ? dto.tipo_procedimiento || null : null,
         dto.id_especialidad !== undefined ? dto.id_especialidad || null : null,
         dto.duracion_minutos ?? null,
         dto.precio_base ?? null,

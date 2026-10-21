@@ -54,7 +54,7 @@ export class SedesService {
     const data = await this.dataSource.query(
       `SELECT s.id_sede, s.nombre, s.razon_social, s.direccion, s.ciudad, s.distrito,
               s.telefono, s.email_contacto, s.horario_apertura, s.horario_cierre,
-              s.logo_url, s.estado
+              s.logo_url, s.estado, s.libre_disposicion
        FROM cli_sede s
        WHERE ${sqlWhere}
        ORDER BY s.nombre ASC
@@ -78,8 +78,8 @@ export class SedesService {
     const res = await this.dataSource.query(
       `INSERT INTO cli_sede
         (nombre, razon_social, direccion, ciudad, distrito, telefono, email_contacto,
-         horario_apertura, horario_cierre, dias_atencion, logo_url, estado, id_usuario_crea)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         horario_apertura, horario_cierre, dias_atencion, logo_url, estado, libre_disposicion, id_usuario_crea)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         nombre,
         dto.razon_social?.trim() || null,
@@ -93,6 +93,7 @@ export class SedesService {
         dto.dias_atencion ? JSON.stringify(dto.dias_atencion) : null,
         dto.logo_url || null,
         dto.estado || 'ACTIVA',
+        dto.libre_disposicion ? 1 : 0,
         userId,
       ],
     );
@@ -117,6 +118,7 @@ export class SedesService {
         dias_atencion = COALESCE(?, dias_atencion),
         logo_url = COALESCE(?, logo_url),
         estado = COALESCE(?, estado),
+        libre_disposicion = COALESCE(?, libre_disposicion),
         id_usuario_mod = ?
        WHERE id_sede = ? AND estado_registro = 'ACTIVO'`,
       [
@@ -132,6 +134,7 @@ export class SedesService {
         dto.dias_atencion !== undefined ? JSON.stringify(dto.dias_atencion) : null,
         dto.logo_url !== undefined ? dto.logo_url || null : null,
         dto.estado || null,
+        dto.libre_disposicion !== undefined ? (dto.libre_disposicion ? 1 : 0) : null,
         userId,
         id,
       ],
@@ -279,6 +282,21 @@ export class SedesService {
     );
     await this.auditoriaService.registrar('cli_equipo', idEquipo, 'ACTUALIZAR', userId, antiguo, dto);
     return { message: 'Equipo actualizado' };
+  }
+
+  async removeEquipo(idEquipo: number, userId: number) {
+    const [antiguo] = await this.dataSource.query(
+      `SELECT * FROM cli_equipo WHERE id_equipo = ? AND estado_registro = 'ACTIVO'`,
+      [idEquipo],
+    );
+    if (!antiguo) throw new NotFoundException('Equipo no encontrado');
+    await this.dataSource.query(
+      `UPDATE cli_equipo SET estado_registro = 'ELIMINADO', id_usuario_mod = ?
+       WHERE id_equipo = ? AND estado_registro = 'ACTIVO'`,
+      [userId, idEquipo],
+    );
+    await this.auditoriaService.registrar('cli_equipo', idEquipo, 'ELIMINAR', userId, antiguo, null);
+    return { message: 'Equipo eliminado' };
   }
 
   async mantenimiento(idEquipo: number, dto: MantenimientoEquipoDto, userId: number) {

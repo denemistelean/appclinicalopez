@@ -64,6 +64,10 @@ export class SedesService {
     return this.http.put(`${environment.apiUrlGestion}/equipos/${idEquipo}`, data);
   }
 
+  deleteEquipo(idEquipo: number): Observable<any> {
+    return this.http.delete(`${environment.apiUrlGestion}/equipos/${idEquipo}`);
+  }
+
   mantenimientoEquipo(idEquipo: number, data: any): Observable<any> {
     return this.http.patch(`${environment.apiUrlGestion}/equipos/${idEquipo}/mantenimiento`, data);
   }

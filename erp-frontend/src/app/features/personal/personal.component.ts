@@ -12,7 +12,6 @@ import { ErpTabsComponent, ErpTab } from 'src/app/shared/components/erp-tabs/erp
 import { PermissionsService } from 'src/app/core/services/seguridad/permissions.service';
 import { AlertService } from 'src/app/core/services/ui/alert.service';
 import { SedesService } from '../sedes/sedes.service';
-import { TratamientosService } from '../tratamientos/tratamientos.service';
 import { PersonalService } from './personal.service';
 
 @Component({
@@ -29,7 +28,6 @@ export class PersonalComponent implements OnInit {
   private fb = inject(FormBuilder);
   private service = inject(PersonalService);
   private sedesService = inject(SedesService);
-  private tratamientosService = inject(TratamientosService);
   private alert = inject(AlertService);
   public perms = inject(PermissionsService);
 
@@ -39,6 +37,7 @@ export class PersonalComponent implements OnInit {
   formHorario: FormGroup;
   formExcepcion: FormGroup;
   formCert: FormGroup;
+  formCred: FormGroup;
 
   activeTab = signal('datos');
   tabs: ErpTab[] = [
@@ -46,14 +45,17 @@ export class PersonalComponent implements OnInit {
     { id: 'horario', label: 'Horario', icon: 'bi-clock' },
     { id: 'excepciones', label: 'Excepciones', icon: 'bi-calendar-x' },
     { id: 'certificaciones', label: 'Certificaciones', icon: 'bi-award' },
+    { id: 'credenciales', label: 'Credenciales', icon: 'bi-card-checklist' },
   ];
 
   sedes = signal<any[]>([]);
-  tratamientos = signal<any[]>([]);
   especialidades = signal<any[]>([]);
   horario = signal<any[]>([]);
   excepciones = signal<any[]>([]);
   certificaciones = signal<any[]>([]);
+  credenciales = signal<any[]>([]);
+  certFile = signal<File | null>(null);
+  certFileName = signal('');
 
   /** Permite crear especialidad al vuelo desde ng-select */
   crearEspecialidadTag = async (nombre: string) => {
@@ -82,6 +84,12 @@ export class PersonalComponent implements OnInit {
     { id: 'HORARIO_ESPECIAL', nombre: 'HORARIO ESPECIAL' },
     { id: 'BLOQUEO', nombre: 'BLOQUEO' },
   ];
+  tiposCredencial = [
+    { id: 'CMP', nombre: 'CMP — Colegio Médico del Perú' },
+    { id: 'RNE', nombre: 'RNE — Registro Nacional de Especialistas' },
+    { id: 'COP', nombre: 'COP — Colegio Odontológico' },
+    { id: 'OTRO', nombre: 'Otro' },
+  ];
 
   constructor() {
     this.form = this.fb.group({
@@ -91,6 +99,7 @@ export class PersonalComponent implements OnInit {
       apellidos: ['', Validators.required],
       especialidad: [''],
       ids_especialidad: [[] as number[]],
+      ids_sede: [[] as number[]],
       telefono: [''],
       email: [''],
       id_sede_principal: [null],
@@ -112,8 +121,16 @@ export class PersonalComponent implements OnInit {
       motivo: [''],
     });
     this.formCert = this.fb.group({
-      id_tratamiento: [null, Validators.required],
+      nombre_certificado: ['', Validators.required],
       fecha_certificacion: [''],
+      fecha_vencimiento: [''],
+      observaciones: [''],
+    });
+    this.formCred = this.fb.group({
+      tipo: ['CMP', Validators.required],
+      numero: ['', Validators.required],
+      entidad: [''],
+      fecha_emision: [''],
       fecha_vencimiento: [''],
       observaciones: [''],
     });
@@ -123,11 +140,16 @@ export class PersonalComponent implements OnInit {
     this.sedesService.findAll(1, 100, '').subscribe({
       next: (res: any) => this.sedes.set(res.data?.data || res.data || []),
     });
-    this.tratamientosService.findAll(1, 200, '').subscribe({
-      next: (res: any) => this.tratamientos.set(res.data?.data || res.data || []),
-      error: () => this.tratamientos.set([]),
-    });
     this.cargarEspecialidades();
+    this.form.get('ids_sede')?.valueChanges.subscribe((ids: number[]) => {
+      const list = Array.isArray(ids) ? ids.map(Number) : [];
+      const principal = this.form.get('id_sede_principal')?.value;
+      if (principal && !list.includes(Number(principal))) {
+        this.form.patchValue({ id_sede_principal: list[0] || null }, { emitEvent: false });
+      } else if (!principal && list.length) {
+        this.form.patchValue({ id_sede_principal: list[0] }, { emitEvent: false });
+      }
+    });
   }
 
   private cargarEspecialidades() {
@@ -146,11 +168,14 @@ export class PersonalComponent implements OnInit {
     if (tab === 'horario') this.cargarHorario(id);
     if (tab === 'excepciones') this.cargarExcepciones(id);
     if (tab === 'certificaciones') this.cargarCertificaciones(id);
+    if (tab === 'credenciales') this.cargarCredenciales(id);
   }
 
   abrirModal(modalTemplate: TemplateRef<any>, item?: any) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     this.activeTab.set('datos');
+    this.certFile.set(null);
+    this.certFileName.set('');
     if (item) {
       this.alert.showLoading('Cargando personal...');
       this.service.findOne(item.id_personal).subscribe({
@@ -161,6 +186,7 @@ export class PersonalComponent implements OnInit {
           this.form.patchValue({
             ...data,
             ids_especialidad: data.ids_especialidad || [],
+            ids_sede: data.ids_sede || [],
           });
           this.crud.openModal(modalTemplate, { centered: true, backdrop: 'static', size: 'xl' });
         },
@@ -168,7 +194,13 @@ export class PersonalComponent implements OnInit {
       });
     } else {
       this.crud.setupModal(null);
-      this.form.reset({ tipo_documento: 'DNI', estado: 'ACTIVO', ids_especialidad: [] });
+      this.form.reset({
+        tipo_documento: 'DNI',
+        estado: 'ACTIVO',
+        ids_especialidad: [],
+        ids_sede: [],
+        id_sede_principal: null,
+      });
       this.crud.openModal(modalTemplate, { centered: true, backdrop: 'static', size: 'xl' });
     }
   }
@@ -176,9 +208,15 @@ export class PersonalComponent implements OnInit {
   guardar() {
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const raw = this.form.getRawValue();
+    const idsSede = Array.isArray(raw.ids_sede) ? raw.ids_sede.map(Number).filter(Boolean) : [];
+    let principal = raw.id_sede_principal ? Number(raw.id_sede_principal) : null;
+    if (principal && !idsSede.includes(principal)) idsSede.push(principal);
+    if (!principal && idsSede.length) principal = idsSede[0];
     this.crud.save({
       ...raw,
       ids_especialidad: Array.isArray(raw.ids_especialidad) ? raw.ids_especialidad : [],
+      sedes: idsSede,
+      id_sede_principal: principal,
     });
   }
 
@@ -197,6 +235,12 @@ export class PersonalComponent implements OnInit {
   private cargarCertificaciones(id: number) {
     this.service.getCertificaciones(id).subscribe({
       next: (res: any) => this.certificaciones.set(res.data?.data || res.data || []),
+    });
+  }
+
+  private cargarCredenciales(id: number) {
+    this.service.getCredenciales(id).subscribe({
+      next: (res: any) => this.credenciales.set(res.data?.data || res.data || []),
     });
   }
 
@@ -233,16 +277,55 @@ export class PersonalComponent implements OnInit {
     });
   }
 
+  onCertFileChange(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0] || null;
+    if (file && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      this.alert.warning('Solo se admite PDF');
+      input.value = '';
+      this.certFile.set(null);
+      this.certFileName.set('');
+      return;
+    }
+    this.certFile.set(file);
+    this.certFileName.set(file?.name || '');
+  }
+
   agregarCertificacion() {
     const id = this.crud.editingId();
     if (!id || this.formCert.invalid) { this.formCert.markAllAsTouched(); return; }
-    this.service.addCertificacion(id, this.formCert.getRawValue()).subscribe({
+    const raw = this.formCert.getRawValue();
+    const fd = new FormData();
+    fd.append('nombre_certificado', raw.nombre_certificado);
+    if (raw.fecha_certificacion) fd.append('fecha_certificacion', raw.fecha_certificacion);
+    if (raw.fecha_vencimiento) fd.append('fecha_vencimiento', raw.fecha_vencimiento);
+    if (raw.observaciones) fd.append('observaciones', raw.observaciones);
+    const file = this.certFile();
+    if (file) fd.append('archivo', file, file.name);
+
+    this.service.addCertificacion(id, fd).subscribe({
       next: () => {
         this.alert.success('Certificación agregada');
         this.formCert.reset();
+        this.certFile.set(null);
+        this.certFileName.set('');
         this.cargarCertificaciones(id);
       },
       error: (err: any) => this.alert.error(err.error?.mensaje || 'Error'),
+    });
+  }
+
+  verArchivoCert(c: any) {
+    if (!c?.archivo_ruta) return;
+    const id = this.crud.editingId();
+    if (!id) return;
+    this.service.getArchivoCertificacionBlob(id, c.id_personal_certificacion).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      },
+      error: () => this.alert.error('No se pudo abrir el PDF'),
     });
   }
 
@@ -255,7 +338,44 @@ export class PersonalComponent implements OnInit {
     });
   }
 
+  onTipoCredChange(tipo: string) {
+    const map: Record<string, string> = {
+      CMP: 'Colegio Médico del Perú',
+      RNE: 'Registro Nacional de Especialistas',
+      COP: 'Colegio Odontológico del Perú',
+    };
+    if (map[tipo] && !this.formCred.get('entidad')?.value) {
+      this.formCred.patchValue({ entidad: map[tipo] });
+    }
+  }
+
+  agregarCredencial() {
+    const id = this.crud.editingId();
+    if (!id || this.formCred.invalid) { this.formCred.markAllAsTouched(); return; }
+    this.service.addCredencial(id, this.formCred.getRawValue()).subscribe({
+      next: () => {
+        this.alert.success('Credencial agregada');
+        this.formCred.reset({ tipo: 'CMP' });
+        this.cargarCredenciales(id);
+      },
+      error: (err: any) => this.alert.error(err.error?.mensaje || 'Error'),
+    });
+  }
+
+  eliminarCredencial(idCred: number) {
+    const id = this.crud.editingId();
+    if (!id) return;
+    this.service.deleteCredencial(id, idCred).subscribe({
+      next: () => { this.alert.success('Eliminada'); this.cargarCredenciales(id); },
+      error: (err: any) => this.alert.error(err.error?.mensaje || 'Error'),
+    });
+  }
+
   nombreDia(d: number) {
     return this.diasSemana.find(x => x.id === d)?.nombre || d;
+  }
+
+  nombreSede(id: number) {
+    return this.sedes().find((s) => Number(s.id_sede) === Number(id))?.nombre || id;
   }
 }

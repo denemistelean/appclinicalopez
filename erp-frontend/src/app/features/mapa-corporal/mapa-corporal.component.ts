@@ -5,7 +5,10 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Input,
+  OnChanges,
   OnDestroy,
+  SimpleChanges,
   ViewChild,
   inject,
   signal,
@@ -50,8 +53,14 @@ type MarkerMesh = {
   styleUrl: './mapa-corporal.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
+export class MapaCorporalComponent implements AfterViewInit, OnChanges, OnDestroy {
   @ViewChild('canvasHost', { static: true }) canvasHost!: ElementRef<HTMLDivElement>;
+
+  /** Embebido en wizard de atención (sin selector de paciente) */
+  @Input() embedded = false;
+  @Input() idPaciente: number | null = null;
+  @Input() idCita: number | null = null;
+  @Input() idConsulta: number | null = null;
 
   private fb = inject(FormBuilder);
   private service = inject(MapaCorporalService);
@@ -114,29 +123,37 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
     });
   }
 
+  ngOnChanges(changes: SimpleChanges) {
+    if (this.embedded && (changes['idPaciente'] || changes['idCita'] || changes['idConsulta'])) {
+      this.aplicarContextoAtencion();
+    }
+  }
+
   ngAfterViewInit() {
-    this.pacTypeahead$
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        filter((t) => (t || '').trim().length >= 2),
-        switchMap((term) => {
-          this.pacientesLoading.set(true);
-          return this.pacientesService.findAll(1, 50, term.trim()).pipe(
-            catchError(() => of({ data: { data: [] } })),
-          );
-        }),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe((res: any) => {
-        this.pacientesLoading.set(false);
-        const list = (res.data?.data || res.data || []).map((p: any) => ({
-          ...p,
-          label: this.labelPaciente(p),
-        }));
-        this.pacientes.set(list);
-        this.cdr.markForCheck();
-      });
+    if (!this.embedded) {
+      this.pacTypeahead$
+        .pipe(
+          debounceTime(300),
+          distinctUntilChanged(),
+          filter((t) => (t || '').trim().length >= 2),
+          switchMap((term) => {
+            this.pacientesLoading.set(true);
+            return this.pacientesService.findAll(1, 50, term.trim()).pipe(
+              catchError(() => of({ data: { data: [] } })),
+            );
+          }),
+          takeUntilDestroyed(this.destroyRef),
+        )
+        .subscribe((res: any) => {
+          this.pacientesLoading.set(false);
+          const list = (res.data?.data || res.data || []).map((p: any) => ({
+            ...p,
+            label: this.labelPaciente(p),
+          }));
+          this.pacientes.set(list);
+          this.cdr.markForCheck();
+        });
+    }
 
     this.formPac.get('id_paciente')?.valueChanges.subscribe((id) => {
       this.selectedCodigo.set(null);
@@ -152,6 +169,23 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
 
     this.initScene();
     this.loadModel();
+    if (this.embedded) {
+      this.aplicarContextoAtencion();
+      // El canvas nace en pestaña oculta a veces: redimensionar tras pintar
+      setTimeout(() => this.resize(), 80);
+      setTimeout(() => this.resize(), 400);
+    }
+  }
+
+  private aplicarContextoAtencion() {
+    const id = Number(this.idPaciente || 0);
+    if (!id) return;
+    if (Number(this.formPac.value.id_paciente) !== id) {
+      this.formPac.patchValue({ id_paciente: id }, { emitEvent: true });
+    } else {
+      this.cargarRegistros(id);
+    }
+    this.asegurarPaciente(id);
   }
 
   ngOnDestroy() {
@@ -671,6 +705,8 @@ export class MapaCorporalComponent implements AfterViewInit, OnDestroy {
     );
     const payload = {
       id_paciente: Number(this.formPac.value.id_paciente),
+      id_cita: this.idCita ? Number(this.idCita) : null,
+      id_consulta: this.idConsulta ? Number(this.idConsulta) : null,
       zona_codigo: z.zona_codigo,
       zona_label: z.zona_label,
       lado: z.lado,

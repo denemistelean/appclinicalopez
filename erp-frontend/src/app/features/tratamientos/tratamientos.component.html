@@ -1,7 +1,12 @@
 <div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
   <div class="card-pro mb-3 p-3">
     <div class="row g-2 align-items-end">
-      <div class="col-md-4">
+      <div class="col-md-3">
+        <label class="form-label">Tipo</label>
+        <ng-select class="ng-select-sm" [items]="tiposProcedimiento" bindLabel="nombre" bindValue="id"
+                   [formControl]="filtroTipoProc" placeholder="Todos" [clearable]="true" appendTo="body"></ng-select>
+      </div>
+      <div class="col-md-3">
         <label class="form-label">Categoría</label>
         <input type="text" class="form-control" [formControl]="filtroCategoria" placeholder="Filtrar categoría">
       </div>
@@ -17,7 +22,7 @@
   </div>
 
   <div class="card-pro table-pro-container mb-3 p-0 p-md-3 animate__animated animate__fadeInUp">
-    <app-table-pro titulo="Tratamientos" subtitulo="Catálogo de servicios clínicos" btnText="NUEVO TRATAMIENTO"
+    <app-table-pro titulo="Procedimientos" subtitulo="Catálogo quirúrgico y estético (con duración)" btnText="NUEVO PROCEDIMIENTO"
       [showAddBtn]="perms.hasPermission('crear_tratamiento')" [loading]="crud.tableLoading()"
       [data]="crud.resource().data" [meta]="crud.resource().meta"
       (add)="abrirModal(modalFormulario)" (pageChange)="crud.cambiarPagina($event)" (search)="onSearch($event)">
@@ -27,7 +32,7 @@
           <th class="ps-3 fw-bold border-0" style="width: 80px;">ID</th>
           <th class="fw-bold border-0">CÓDIGO</th>
           <th class="fw-bold border-0">NOMBRE</th>
-          <th class="fw-bold border-0">CATEGORÍA</th>
+          <th class="fw-bold border-0">TIPO</th>
           <th class="fw-bold border-0 text-end">DURACIÓN</th>
           <th class="fw-bold border-0 text-end">PRECIO</th>
           <th class="fw-bold border-0 text-center">ESTADO</th>
@@ -40,7 +45,9 @@
             <td class="ps-3 py-3"><div class="fw-bold text-primary-erp">#{{ item.id_tratamiento }}</div></td>
             <td>{{ item.codigo || '—' }}</td>
             <td class="fw-bold text-erp text-uppercase">{{ item.nombre }}</td>
-            <td class="text-muted-erp">{{ item.categoria || '—' }}</td>
+            <td class="text-muted-erp">
+              {{ item.tipo_procedimiento === 'QUIRURGICO' ? 'Quirúrgico' : (item.tipo_procedimiento === 'NO_QUIRURGICO' ? 'No quirúrgico' : (item.categoria || '—')) }}
+            </td>
             <td class="text-end">{{ item.duracion_minutos }} min</td>
             <td class="text-end">{{ item.precio_base | number:'1.2-2' }}</td>
             <td class="text-center">
@@ -63,7 +70,7 @@
             </td>
           </tr>
         } @empty {
-          <tr><td colspan="8" class="text-center py-5 text-muted-erp">No hay tratamientos.</td></tr>
+          <tr><td colspan="8" class="text-center py-5 text-muted-erp">No hay procedimientos.</td></tr>
         }
       </tbody>
     </app-table-pro>
@@ -74,7 +81,7 @@
   <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
     <h5 class="modal-title fw-bold text-erp">
       <div class="icon-badge me-2"><i class="bi bi-clipboard2-pulse"></i></div>
-      {{ crud.editingId() ? 'Editar Tratamiento' : 'Nuevo Tratamiento' }}
+      {{ crud.editingId() ? 'Editar procedimiento' : 'Nuevo procedimiento' }}
     </h5>
     <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
   </div>
@@ -93,6 +100,11 @@
       <div class="col-12">
         <label class="form-label">Descripción</label>
         <textarea class="form-control" rows="2" formControlName="descripcion"></textarea>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Tipo de procedimiento <span class="req-star">*</span></label>
+        <ng-select class="ng-select-sm" [items]="tiposProcedimiento" bindLabel="nombre" bindValue="id"
+                   formControlName="tipo_procedimiento" appendTo="body" [clearable]="false"></ng-select>
       </div>
       <div class="col-md-4">
         <label class="form-label">Categoría</label>

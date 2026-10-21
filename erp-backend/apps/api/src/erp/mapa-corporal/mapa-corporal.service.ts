@@ -120,6 +120,14 @@ export class MapaCorporalService {
       w.push('m.id_paciente=?');
       p.push(Number(q.id_paciente));
     }
+    if (q.id_cita) {
+      w.push('m.id_cita=?');
+      p.push(Number(q.id_cita));
+    }
+    if (q.id_consulta) {
+      w.push('m.id_consulta=?');
+      p.push(Number(q.id_consulta));
+    }
     if (q.search) {
       const s = `%${String(q.search).trim()}%`;
       w.push(`(m.zona_label LIKE ? OR m.procedimiento LIKE ? OR CONCAT(pa.nombres,' ',pa.apellidos) LIKE ?)`);
@@ -200,6 +208,8 @@ export class MapaCorporalService {
     const old = await this.findOne(id);
     await this.db.query(
       `UPDATE cli_mapa_marcador SET
+         id_consulta=COALESCE(?,id_consulta),
+         id_cita=COALESCE(?,id_cita),
          zona_label=COALESCE(?,zona_label),
          lado=COALESCE(?,lado),
          procedimiento=COALESCE(?,procedimiento),
@@ -215,6 +225,8 @@ export class MapaCorporalService {
          id_usuario_mod=?
        WHERE id_mapa_marcador=? AND estado_registro='ACTIVO'`,
       [
+        d.id_consulta ?? null,
+        d.id_cita ?? null,
         d.zona_label ?? null,
         d.lado ?? null,
         d.procedimiento ?? null,
@@ -233,6 +245,34 @@ export class MapaCorporalService {
     );
     await this.auditoria.registrar('cli_mapa_marcador', id, 'ACTUALIZAR', userId, old, d);
     return { message: 'Marcador actualizado' };
+  }
+
+  /** Asocia marcadores de la cita a la consulta/atención. */
+  async vincularAConsulta(opts: {
+    id_consulta: number;
+    id_cita?: number | null;
+    userId: number;
+  }) {
+    const idConsulta = Number(opts.id_consulta);
+    const idCita = opts.id_cita ? Number(opts.id_cita) : 0;
+    if (!idConsulta || !idCita) return { vinculados: 0 };
+    const r = await this.db.query(
+      `UPDATE cli_mapa_marcador
+       SET id_consulta=?, id_usuario_mod=?
+       WHERE id_cita=? AND estado_registro='ACTIVO'
+         AND (id_consulta IS NULL OR id_consulta=?)`,
+      [idConsulta, opts.userId, idCita, idConsulta],
+    );
+    const afectados = Number(r?.affectedRows || 0);
+    if (afectados) {
+      await this.auditoria.registrar('cli_mapa_marcador', idConsulta, 'ACTUALIZAR', opts.userId, null, {
+        accion: 'vincular_consulta',
+        id_consulta: idConsulta,
+        id_cita: idCita,
+        vinculados: afectados,
+      });
+    }
+    return { vinculados: afectados };
   }
 
   async remove(id: number, userId: number) {

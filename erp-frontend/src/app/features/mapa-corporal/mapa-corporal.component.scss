@@ -1,4 +1,19 @@
 .mapa-wrap { max-width: var(--erp-max-width); }
+.mapa-embedded {
+  max-width: 100%;
+  padding: 0 !important;
+}
+.mapa-embed-banner {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0d9488;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.mapa-embedded .mapa-canvas-card { min-height: 480px; }
+.mapa-embedded .mapa-canvas { height: 480px; }
 .mapa-layout {
   display: grid;
   grid-template-columns: 240px 1fr 320px;

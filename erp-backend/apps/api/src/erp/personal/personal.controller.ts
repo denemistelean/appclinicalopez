@@ -10,16 +10,24 @@ import {
   Put,
   Query,
   Req,
+  Res,
+  StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard, PermissionsGuard, RequirePermissions } from '@app/auth';
 import { PersonalService } from './personal.service';
 import {
   CreateCertificacionDto,
+  CreateCredencialDto,
   CreateExcepcionDto,
   CreatePersonalDto,
   ReplaceHorarioDto,
   SyncSedesDto,
+  UpdateCredencialDto,
   UpdatePersonalDto,
 } from './personal.dto';
 
@@ -116,12 +124,40 @@ export class PersonalController {
 
   @RequirePermissions('PERSONAL', 'crear_personal')
   @Post(':id/certificaciones')
+  @UseInterceptors(
+    FileInterceptor('archivo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 15 * 1024 * 1024 },
+    }),
+  )
   createCertificacion(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateCertificacionDto,
+    @Body() body: any,
+    @UploadedFile() file: Express.Multer.File,
     @Req() req: any,
   ) {
-    return this.personalService.createCertificacion(id, dto, req.user.userId);
+    const dto: CreateCertificacionDto = {
+      nombre_certificado: String(body?.nombre_certificado || '').trim(),
+      fecha_certificacion: body?.fecha_certificacion || undefined,
+      fecha_vencimiento: body?.fecha_vencimiento || undefined,
+      observaciones: body?.observaciones || undefined,
+    };
+    return this.personalService.createCertificacion(id, dto, req.user.userId, file);
+  }
+
+  @RequirePermissions('PERSONAL', 'ver_personal')
+  @Get(':id/certificaciones/:idCert/archivo')
+  async archivoCertificacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idCert', ParseIntPipe) idCert: number,
+    @Res({ passthrough: true }) res: any,
+  ): Promise<StreamableFile> {
+    const { file, mime, nombre } = await this.personalService.streamCertificacion(id, idCert);
+    res.set({
+      'Content-Type': mime,
+      'Content-Disposition': `inline; filename="${nombre}"`,
+    });
+    return file;
   }
 
   @RequirePermissions('PERSONAL', 'eliminar_personal')
@@ -132,6 +168,43 @@ export class PersonalController {
     @Req() req: any,
   ) {
     return this.personalService.removeCertificacion(id, idCert, req.user.userId);
+  }
+
+  @RequirePermissions('PERSONAL', 'ver_personal')
+  @Get(':id/credenciales')
+  listCredenciales(@Param('id', ParseIntPipe) id: number) {
+    return this.personalService.listCredenciales(id);
+  }
+
+  @RequirePermissions('PERSONAL', 'crear_personal')
+  @Post(':id/credenciales')
+  createCredencial(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateCredencialDto,
+    @Req() req: any,
+  ) {
+    return this.personalService.createCredencial(id, dto, req.user.userId);
+  }
+
+  @RequirePermissions('PERSONAL', 'actualizar_personal')
+  @Patch(':id/credenciales/:idCred')
+  updateCredencial(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idCred', ParseIntPipe) idCred: number,
+    @Body() dto: UpdateCredencialDto,
+    @Req() req: any,
+  ) {
+    return this.personalService.updateCredencial(id, idCred, dto, req.user.userId);
+  }
+
+  @RequirePermissions('PERSONAL', 'eliminar_personal')
+  @Delete(':id/credenciales/:idCred')
+  removeCredencial(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idCred', ParseIntPipe) idCred: number,
+    @Req() req: any,
+  ) {
+    return this.personalService.removeCredencial(id, idCred, req.user.userId);
   }
 
   @RequirePermissions('PERSONAL', 'ver_personal')

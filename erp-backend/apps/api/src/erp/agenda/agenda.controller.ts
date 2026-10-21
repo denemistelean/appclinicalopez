@@ -33,6 +33,12 @@ export class AgendaController {
   }
 
   @RequirePermissions('AGENDA', 'ver_cita')
+  @Get('semana')
+  semana(@Query() q: any) {
+    return this.service.semana(q);
+  }
+
+  @RequirePermissions('AGENDA', 'ver_cita')
   @Get('tipos-cita')
   tiposCita() {
     return this.service.listTiposCita();

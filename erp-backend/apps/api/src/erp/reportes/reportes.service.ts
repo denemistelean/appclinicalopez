@@ -49,6 +49,81 @@ export class ReportesService {
     };
   }
 
+  /** Padrón de pacientes: KPIs + listado paginado. */
+  async pacientes(q: any) {
+    const page = Math.max(1, Number(q.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(q.limit) || 10));
+    const offset = (page - 1) * limit;
+    const search = String(q.search || '').trim();
+    const w = [`p.estado_registro='ACTIVO'`];
+    const params: any[] = [];
+    if (search) {
+      const like = `%${search}%`;
+      w.push(`(
+        p.nombres LIKE ? OR p.apellidos LIKE ? OR p.numero_documento LIKE ?
+        OR CONCAT(p.apellidos,' ',p.nombres) LIKE ?
+        OR CONCAT(p.nombres,' ',p.apellidos) LIKE ?
+        OR p.telefono LIKE ? OR p.telefono_alterno LIKE ?
+      )`);
+      params.push(like, like, like, like, like, like, like);
+    }
+    const where = w.join(' AND ');
+
+    const [kpis] = await this.db.query(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(p.sexo='M') AS masculinos,
+         SUM(p.sexo='F') AS femeninos,
+         SUM(
+           p.fecha_registro IS NOT NULL
+           AND YEAR(p.fecha_registro)=YEAR(CURDATE())
+           AND MONTH(p.fecha_registro)=MONTH(CURDATE())
+         ) AS nuevos_mes
+       FROM cli_paciente p
+       WHERE p.estado_registro='ACTIVO'`,
+    );
+    const [countRow] = await this.db.query(
+      `SELECT COUNT(*) AS total FROM cli_paciente p WHERE ${where}`,
+      params,
+    );
+    const data = await this.db.query(
+      `SELECT
+         p.id_paciente,
+         p.tipo_documento,
+         p.numero_documento,
+         p.nombres,
+         p.apellidos,
+         TRIM(CONCAT(p.apellidos, ', ', p.nombres)) AS nombre_completo,
+         p.fecha_nacimiento,
+         TIMESTAMPDIFF(YEAR, p.fecha_nacimiento, CURDATE()) AS edad,
+         p.sexo,
+         p.telefono,
+         p.telefono_alterno,
+         p.fecha_registro
+       FROM cli_paciente p
+       WHERE ${where}
+       ORDER BY p.apellidos, p.nombres
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+    const total = Number(countRow?.total || 0);
+    return {
+      kpis: {
+        total: Number(kpis?.total || 0),
+        masculinos: Number(kpis?.masculinos || 0),
+        femeninos: Number(kpis?.femeninos || 0),
+        nuevos_mes: Number(kpis?.nuevos_mes || 0),
+      },
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
+  }
+
   /** Informe integral por paciente (JSON). El FE filtra vacíos al renderizar. */
   async informePaciente(idPaciente: number) {
     const id = Number(idPaciente);

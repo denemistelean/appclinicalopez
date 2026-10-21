@@ -30,23 +30,30 @@
 .inf-header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-end;
   gap: 1rem;
   border-bottom: 2px solid #1e3a5f;
   padding-bottom: 0.75rem;
   margin-bottom: 1.1rem;
 }
 
-.inf-brand {
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #5b6b7c;
-  font-weight: 600;
+.inf-brand-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.inf-logo {
+  height: 86px;
+  width: auto;
+  max-width: 320px;
+  object-fit: contain;
 }
 
 .inf-title {
-  font-size: 1.35rem;
-  margin: 0.15rem 0 0;
+  font-size: 1.2rem;
+  margin: 0;
   color: #1e3a5f;
   font-weight: 700;
 }
@@ -146,12 +153,38 @@
 }
 
 .inf-footer {
-  margin-top: 1.5rem;
-  padding-top: 0.6rem;
+  margin-top: 2rem;
+  padding-top: 0.85rem;
   border-top: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+.inf-firma {
+  margin: 0.5rem auto 1rem;
+}
+
+.inf-firma-line {
+  width: 220px;
+  margin: 0 auto 0.55rem;
+  border-top: 1px solid #b8beb8;
+}
+
+.inf-firma-nombre {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #1c2620;
+}
+
+.inf-firma-esp,
+.inf-firma-cred {
+  font-size: 0.82rem;
+  color: #6b756e;
+  margin-top: 0.1rem;
+}
+
+.inf-footer-note {
   font-size: 0.72rem;
   color: #94a3b8;
-  text-align: center;
 }
 
 .cuerpo-foto {

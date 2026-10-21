@@ -7,7 +7,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { createReadStream, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'fs';
 import { dirname, extname, join } from 'path';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
 import { TipoDocumentoDto, UpdateDocumentoDto, UpdateTipoDocumentoDto } from './documentos.dto';
@@ -98,9 +105,11 @@ export class DocumentosService {
     }
     if (q.activo === '1' || q.activo === 1 || q.activo === true) w.push(`activo=1`);
     const where = w.join(' AND ');
-    const [[{ total }]] = await Promise.all([
-      this.db.query(`SELECT COUNT(*) total FROM cli_tipo_documento WHERE ${where}`, params),
-    ]);
+    const [countRow] = await this.db.query(
+      `SELECT COUNT(*) total FROM cli_tipo_documento WHERE ${where}`,
+      params,
+    );
+    const total = Number(countRow?.total || 0);
     const data = await this.db.query(
       `SELECT * FROM cli_tipo_documento WHERE ${where} ORDER BY nombre LIMIT ? OFFSET ?`,
       [...params, limit, offset],
@@ -212,13 +221,14 @@ export class DocumentosService {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
     const where = w.join(' AND ');
-    const [[{ total }]] = await this.db.query(
+    const [countRow] = await this.db.query(
       `SELECT COUNT(*) total
        FROM cli_documento d
        JOIN cli_paciente p ON p.id_paciente=d.id_paciente
        WHERE ${where}`,
       params,
     );
+    const total = Number(countRow?.total || 0);
     const data = await this.db.query(
       `SELECT d.*,
               t.codigo AS tipo_codigo, t.nombre AS tipo_nombre,
@@ -431,5 +441,92 @@ export class DocumentosService {
        LIMIT ?`,
       [idPaciente, limit],
     );
+  }
+
+  /**
+   * Guarda un PDF generado en memoria (sin Multer).
+   * Usado al finalizar una atención (Anamnesis / EF / Dx / Plan).
+   */
+  async guardarPdfGenerado(opts: {
+    buffer: Buffer;
+    idPaciente: number;
+    codigoTipo: string;
+    idConsulta?: number | null;
+    idCita?: number | null;
+    titulo: string;
+    userId: number;
+  }) {
+    const [tipo] = await this.db.query(
+      `SELECT * FROM cli_tipo_documento
+       WHERE codigo=? AND estado_registro='ACTIVO' AND activo=1 LIMIT 1`,
+      [opts.codigoTipo],
+    );
+    if (!tipo) {
+      throw new BadRequestException(`Tipo de documento ${opts.codigoTipo} no configurado`);
+    }
+
+    let fechaConsulta: Date | string | null = null;
+    if (opts.idConsulta) {
+      const [cons] = await this.db.query(
+        `SELECT fecha_consulta FROM cli_consulta WHERE id_consulta=? AND estado_registro='ACTIVO'`,
+        [opts.idConsulta],
+      );
+      fechaConsulta = cons?.fecha_consulta || null;
+    }
+
+    const hoy = new Date();
+    const fechaStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+
+    const qr = this.db.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+      const corr = await this.nextCorrelativo(fechaStr, qr);
+      const nombreArchivo = `${fechaStr}-${this.pad(corr, 5)}.pdf`;
+      const rutaRelativa = this.buildRelativePath({
+        idPaciente: opts.idPaciente,
+        categoria: tipo.codigo,
+        idConsulta: opts.idConsulta || null,
+        fechaConsulta,
+        nombreArchivo,
+      });
+      const absPath = join(this.getRoot(), ...rutaRelativa.split('/'));
+      mkdirSync(dirname(absPath), { recursive: true });
+      writeFileSync(absPath, opts.buffer);
+
+      const r = await qr.query(
+        `INSERT INTO cli_documento
+          (id_paciente,id_tipo_documento,id_consulta,id_cita,titulo,nombre_original,nombre_archivo,
+           ruta_relativa,mime_type,tamano_bytes,fecha_documento,observaciones,id_usuario_crea)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          opts.idPaciente,
+          tipo.id_tipo_documento,
+          opts.idConsulta || null,
+          opts.idCita || null,
+          opts.titulo,
+          `${opts.titulo}.pdf`,
+          nombreArchivo,
+          rutaRelativa,
+          'application/pdf',
+          opts.buffer.length,
+          fechaStr,
+          'Generado automáticamente al finalizar la atención',
+          opts.userId,
+        ],
+      );
+      await qr.commitTransaction();
+      return {
+        id: Number(r.insertId),
+        codigo: tipo.codigo,
+        ruta_relativa: rutaRelativa,
+        nombre_archivo: nombreArchivo,
+      };
+    } catch (e) {
+      await qr.rollbackTransaction();
+      throw e;
+    } finally {
+      await qr.release();
+    }
   }
 }

@@ -67,7 +67,7 @@ export class ConsultaDto {
   @IsOptional() @Transform(toNum) @IsNumber() id_cita?: number;
   @IsOptional() @Transform(toNum) @IsNumber() id_plantilla_clinica?: number;
   @IsString() fecha_consulta!: string;
-  @IsString() @IsNotEmpty() motivo_consulta!: string;
+  @IsOptional() @IsString() motivo_consulta?: string;
   @IsOptional() @IsString() tiempo_enfermedad?: string;
   @IsOptional() @IsString() tipo_enfermedad?: string;
   @IsOptional() @IsString() relato?: string;

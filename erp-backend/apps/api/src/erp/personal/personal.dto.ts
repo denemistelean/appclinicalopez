@@ -38,7 +38,12 @@ export class CreatePersonalDto {
   @IsOptional() @IsInt() @Min(1) id_usuario?: number;
   @IsOptional() @IsIn(['ACTIVO', 'INACTIVO', 'VACACIONES', 'LICENCIA']) estado?: string;
   @IsOptional() @IsString() @MaxLength(500) observaciones?: string;
-  @IsOptional() @IsArray() sedes?: number[];
+  /** Una o más sedes asignadas */
+  @IsOptional()
+  @Transform(toIntArray)
+  @IsArray()
+  @IsInt({ each: true })
+  sedes?: number[];
 }
 
 export class UpdatePersonalDto extends PartialType(CreatePersonalDto) {}
@@ -67,11 +72,22 @@ export class CreateExcepcionDto {
 }
 
 export class CreateCertificacionDto {
-  @IsInt() @Min(1) id_tratamiento!: number;
+  @IsString() @IsNotEmpty() @MaxLength(255) nombre_certificado!: string;
   @IsOptional() @IsString() fecha_certificacion?: string;
   @IsOptional() @IsString() fecha_vencimiento?: string;
-  @IsOptional() @IsString() @MaxLength(255) observaciones?: string;
+  @IsOptional() @IsString() @MaxLength(500) observaciones?: string;
 }
+
+export class CreateCredencialDto {
+  @IsString() @IsNotEmpty() @MaxLength(40) tipo!: string;
+  @IsString() @IsNotEmpty() @MaxLength(80) numero!: string;
+  @IsOptional() @IsString() @MaxLength(180) entidad?: string;
+  @IsOptional() @IsString() fecha_emision?: string;
+  @IsOptional() @IsString() fecha_vencimiento?: string;
+  @IsOptional() @IsString() @MaxLength(500) observaciones?: string;
+}
+
+export class UpdateCredencialDto extends PartialType(CreateCredencialDto) {}
 
 export class SyncSedesDto {
   @IsArray() sedes!: number[];

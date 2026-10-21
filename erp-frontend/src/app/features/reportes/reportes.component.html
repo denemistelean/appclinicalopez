@@ -1,69 +1,106 @@
-<div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
-  <div class="card-pro p-3 mb-3">
-    <h5 class="fw-bold text-erp mb-3">Reportes clínicos</h5>
-    <div class="row g-2 align-items-end">
-      <div class="col-md-3">
-        <label class="form-label">Sede</label>
-        <ng-select class="ng-select-sm" [items]="sedes()" bindLabel="nombre" bindValue="id_sede"
-                   [formControl]="idSede" placeholder="Todas" [clearable]="true"></ng-select>
+<div class="rp-wrap">
+  <div class="rp-kpis">
+    <article class="rp-kpi">
+      <div class="rp-kpi-ico"><i class="bi bi-people"></i></div>
+      <div>
+        <div class="rp-kpi-label">Total pacientes</div>
+        <div class="rp-kpi-num">{{ kpis().total }}</div>
       </div>
-      <div class="col-md-3">
-        <label class="form-label">Desde</label>
-        <input type="date" class="form-control" [formControl]="fechaDesde">
+    </article>
+    <article class="rp-kpi">
+      <div class="rp-kpi-ico m"><i class="bi bi-person"></i></div>
+      <div>
+        <div class="rp-kpi-label">Masculino</div>
+        <div class="rp-kpi-num">{{ kpis().masculinos }}</div>
       </div>
-      <div class="col-md-3">
-        <label class="form-label">Hasta</label>
-        <input type="date" class="form-control" [formControl]="fechaHasta">
+    </article>
+    <article class="rp-kpi">
+      <div class="rp-kpi-ico f"><i class="bi bi-person"></i></div>
+      <div>
+        <div class="rp-kpi-label">Femenino</div>
+        <div class="rp-kpi-num">{{ kpis().femeninos }}</div>
       </div>
-      <div class="col-md-3">
-        <button type="button" class="btn btn-primary w-100" (click)="cargar()" [disabled]="loading()">
-          <i class="bi bi-arrow-repeat me-1"></i> Actualizar
-        </button>
+    </article>
+    <article class="rp-kpi">
+      <div class="rp-kpi-ico n"><i class="bi bi-person-plus"></i></div>
+      <div>
+        <div class="rp-kpi-label">Nuevos este mes</div>
+        <div class="rp-kpi-num">{{ kpis().nuevos_mes }}</div>
       </div>
-    </div>
+    </article>
   </div>
 
-  <div class="row g-3 mb-3">
-    <div class="col-md-3">
-      <div class="card-pro p-3 text-center">
-        <div class="text-muted-erp small">Citas</div>
-        <div class="fs-3 fw-bold text-primary-erp">{{ resumen()?.total_citas ?? resumen()?.citas ?? '—' }}</div>
+  <section class="rp-panel">
+    <div class="rp-toolbar">
+      <div class="rp-search">
+        <i class="bi bi-search"></i>
+        <input type="text" [formControl]="searchControl" placeholder="Buscar pacientes...">
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card-pro p-3 text-center">
-        <div class="text-muted-erp small">Pacientes nuevos</div>
-        <div class="fs-3 fw-bold text-primary-erp">{{ resumen()?.pacientes_nuevos ?? resumen()?.pacientes ?? '—' }}</div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card-pro p-3 text-center">
-        <div class="text-muted-erp small">Consultas</div>
-        <div class="fs-3 fw-bold text-primary-erp">{{ resumen()?.total_consultas ?? resumen()?.consultas ?? '—' }}</div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card-pro p-3 text-center">
-        <div class="text-muted-erp small">Facturado</div>
-        <div class="fs-3 fw-bold text-primary-erp">{{ resumen()?.total_facturado ?? resumen()?.facturado ?? '—' }}</div>
-      </div>
-    </div>
-  </div>
 
-  <div class="card-pro p-3">
-    <h6 class="fw-bold mb-3">Citas por estado</h6>
-    <table class="table table-sm align-middle mb-0">
-      <thead><tr><th>Estado</th><th class="text-end">Cantidad</th></tr></thead>
-      <tbody>
-        @for (r of citasEstado(); track r.estado || $index) {
+    <div class="table-responsive">
+      <table class="rp-table">
+        <thead>
           <tr>
-            <td>{{ r.estado }}</td>
-            <td class="text-end fw-bold">{{ r.total ?? r.cantidad }}</td>
+            <th>Paciente</th>
+            <th>Documento</th>
+            <th>Edad</th>
+            <th>Género</th>
+            <th>Teléfono</th>
+            <th>Registro</th>
           </tr>
-        } @empty {
-          <tr><td colspan="2" class="text-center text-muted py-4">Sin datos en el rango.</td></tr>
-        }
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody>
+          @if (loading()) {
+            <tr><td colspan="6" class="rp-empty">Cargando pacientes…</td></tr>
+          } @else {
+            @for (p of pacientes(); track p.id_paciente) {
+              <tr>
+                <td>
+                  <div class="rp-pac">
+                    <span class="rp-avatar">{{ iniciales(p) }}</span>
+                    <span class="rp-name">{{ p.nombre_completo || (p.apellidos + ', ' + p.nombres) }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="rp-doc-tipo">{{ p.tipo_documento || 'DOC' }}</div>
+                  <div class="rp-doc-num">{{ p.numero_documento || '—' }}</div>
+                </td>
+                <td>
+                  <div class="fw-semibold">{{ edadLabel(p) }}</div>
+                  <div class="rp-sub">{{ fechaCorta(p.fecha_nacimiento) }}</div>
+                </td>
+                <td>
+                  <span class="rp-sexo" [class.m]="p.sexo === 'M'" [class.f]="p.sexo === 'F'">
+                    {{ genero(p.sexo) }}
+                  </span>
+                </td>
+                <td>{{ telefono(p) }}</td>
+                <td>{{ fechaCorta(p.fecha_registro) }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="rp-empty">No hay pacientes.</td></tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="rp-foot">
+      <span>{{ rangoLabel() }}</span>
+      <div class="rp-pager">
+        <label>
+          Mostrar
+          <select [value]="limit()" (change)="cambiarLimite(+$any($event.target).value)">
+            <option [value]="10">10</option>
+            <option [value]="25">25</option>
+            <option [value]="50">50</option>
+          </select>
+        </label>
+        <button type="button" [disabled]="page() <= 1" (click)="irPagina(page() - 1)">‹</button>
+        <span>{{ page() }} / {{ lastPage() }}</span>
+        <button type="button" [disabled]="page() >= lastPage()" (click)="irPagina(page() + 1)">›</button>
+      </div>
+    </div>
+  </section>
 </div>

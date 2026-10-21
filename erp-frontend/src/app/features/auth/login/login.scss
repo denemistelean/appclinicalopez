@@ -26,3 +26,21 @@
     color: var(--erp-primary);
   }
 }
+
+.login-brand-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: #fff !important;
+  padding-top: 1.5rem !important;
+  padding-bottom: 1rem !important;
+}
+
+.login-logo {
+  width: 100%;
+  max-width: 320px;
+  height: 118px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(12, 26, 46, 0.12));
+}

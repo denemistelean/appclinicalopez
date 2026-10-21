@@ -3,8 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AgendaService } from '../agenda/agenda.service';
+import { DocumentosService } from '../documentos/documentos.service';
+import { MapaCorporalService } from '../mapa-corporal/mapa-corporal.service';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { AuditoriaService } from '@app/common';
+import { AuditoriaService, PdfService, htmlFirmaPie, htmlLogoHeader } from '@app/common';
 import { DataSource, QueryRunner } from 'typeorm';
 import {
   ConsultaDto,
@@ -18,6 +21,10 @@ export class HistoriaClinicaService {
   constructor(
     @InjectDataSource('APP_DB_CONN') private readonly db: DataSource,
     private readonly auditoria: AuditoriaService,
+    private readonly agenda: AgendaService,
+    private readonly pdf: PdfService,
+    private readonly documentos: DocumentosService,
+    private readonly mapa: MapaCorporalService,
   ) {}
 
   private meta(page: number, limit: number, total: number) {
@@ -142,6 +149,10 @@ export class HistoriaClinicaService {
     if (q.id_paciente) {
       w.push('c.id_paciente=?');
       p.push(Number(q.id_paciente));
+    }
+    if (q.id_cita) {
+      w.push('c.id_cita=?');
+      p.push(Number(q.id_cita));
     }
     if (q.estado) {
       w.push('c.estado=?');
@@ -330,8 +341,15 @@ export class HistoriaClinicaService {
   }
 
   async createConsulta(d: ConsultaDto, userId: number) {
-    if (!d.motivo_consulta?.trim()) {
-      throw new BadRequestException('motivo_consulta requerido');
+    if (d.id_cita) {
+      const [ya] = await this.db.query(
+        `SELECT id_consulta FROM cli_consulta
+         WHERE id_cita=? AND estado_registro='ACTIVO' LIMIT 1`,
+        [d.id_cita],
+      );
+      if (ya) {
+        throw new BadRequestException('Esta cita de agenda ya tiene una cita clínica');
+      }
     }
     const qr = this.db.createQueryRunner();
     await qr.connect();
@@ -350,7 +368,7 @@ export class HistoriaClinicaService {
           d.id_cita || null,
           d.id_plantilla_clinica || null,
           d.fecha_consulta,
-          d.motivo_consulta,
+          d.motivo_consulta?.trim() || '',
           d.tiempo_enfermedad || null,
           d.tipo_enfermedad || null,
           d.relato || null,
@@ -369,6 +387,17 @@ export class HistoriaClinicaService {
       await this.auditoria.registrar('cli_consulta', id, 'CREAR', userId, null, {
         id_paciente: d.id_paciente,
       });
+      if (d.id_cita) {
+        try {
+          await this.mapa.vincularAConsulta({
+            id_consulta: id,
+            id_cita: Number(d.id_cita),
+            userId,
+          });
+        } catch {
+          /* no bloquear guardado de consulta */
+        }
+      }
       return { id, message: 'Consulta guardada' };
     } catch (e) {
       await qr.rollbackTransaction();
@@ -442,9 +471,6 @@ export class HistoriaClinicaService {
   async finalizar(id: number, userId: number) {
     const c = await this.getConsulta(id);
     if (c.estado !== 'BORRADOR') throw new BadRequestException('Solo se finalizan borradores');
-    if (!String(c.motivo_consulta || '').trim()) {
-      throw new BadRequestException('La consulta requiere motivo');
-    }
     if (!c.diagnosticos.length) {
       throw new BadRequestException('La consulta requiere al menos un diagnóstico');
     }
@@ -455,7 +481,189 @@ export class HistoriaClinicaService {
     await this.auditoria.registrar('cli_consulta', id, 'ACTUALIZAR', userId, c, {
       estado: 'FINALIZADA',
     });
-    return { message: 'Consulta finalizada' };
+    if (c.id_cita) {
+      try {
+        await this.agenda.completar(Number(c.id_cita), userId);
+      } catch {
+        // La cita ya estaba cerrada o cancelada; la consulta igual queda finalizada.
+      }
+      try {
+        await this.mapa.vincularAConsulta({
+          id_consulta: id,
+          id_cita: Number(c.id_cita),
+          userId,
+        });
+      } catch {
+        /* mapa opcional */
+      }
+    }
+
+    let pdfs: any[] = [];
+    try {
+      pdfs = await this.generarPdfsAtencion(c, userId);
+    } catch (err) {
+      console.error('Error generando PDFs de atención:', err);
+    }
+
+    return { message: 'Consulta finalizada', pdfs };
+  }
+
+  /** Genera y guarda 4 PDFs (Anamnesis, EF, Diagnóstico, Plan) en cli_documento */
+  private async generarPdfsAtencion(c: any, userId: number) {
+    const paciente = c.paciente || 'Paciente';
+    const fecha = c.fecha_consulta
+      ? new Date(c.fecha_consulta).toLocaleString('es-PE')
+      : '';
+    const header = (titulo: string) => `
+      ${htmlLogoHeader({ titulo, subtitulo: 'Consulta ambulatoria' })}
+      <div style="font-size:12px;color:#4a524c;margin-bottom:14px;padding:8px 10px;background:#f6f7f5;border-radius:8px">
+        <b>Paciente:</b> ${this.esc(paciente)}
+        &nbsp;·&nbsp; <b>Fecha:</b> ${this.esc(fecha)}
+        &nbsp;·&nbsp; <b>Profesional:</b> ${this.esc(c.personal || '—')}
+      </div>`;
+    const wrap = (titulo: string, body: string) => `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <style>
+        @page{margin:16mm 14mm 18mm 14mm}
+        body{font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#1c2620;margin:0;line-height:1.45}
+        h2{font-size:14px;margin:14px 0 6px;color:#0d9488}
+        .box{border:1px solid #e4e7e3;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#fafbfa}
+        .label{font-size:11px;color:#6b756e;text-transform:uppercase;letter-spacing:.03em}
+        table{width:100%;border-collapse:collapse} td,th{border:1px solid #e4e7e3;padding:6px 8px;text-align:left}
+        th{background:#f0f3f1;font-size:12px}
+      </style></head><body>
+        ${header(titulo)}
+        <div class="doc-body">${body}</div>
+        ${htmlFirmaPie()}
+      </body></html>`;
+
+    const ex = c.examen_json || {};
+    const plan = c.plan || {};
+    const meds = plan.medicamentos || [];
+
+    const docs: { codigo: string; titulo: string; html: string }[] = [
+      {
+        codigo: 'HC_ANAMNESIS',
+        titulo: 'Anamnesis',
+        html: wrap(
+          'Anamnesis',
+          `<div class="box"><div class="label">Motivo de consulta</div>${this.esc(c.motivo_consulta)}</div>
+           <div class="box"><div class="label">Tipo de enfermedad</div>${this.esc(c.tipo_enfermedad || '—')}
+             &nbsp;·&nbsp; <span class="label">Tiempo</span> ${this.esc(c.tiempo_enfermedad || '—')}</div>
+           <h2>Relato</h2><div class="box">${this.nl(c.relato || c.anamnesis || 'Sin relato')}</div>`,
+        ),
+      },
+      {
+        codigo: 'HC_EXAMEN_FISICO',
+        titulo: 'Examen físico',
+        html: wrap(
+          'Examen físico',
+          `<h2>General</h2>
+           <div class="box">Peso: ${ex.peso ?? '—'} kg · Talla: ${ex.talla ?? '—'} cm · IMC: ${ex.imc ?? '—'}<br>
+           Estado general: ${this.esc(ex.estado_general || '—')}<br>
+           Estado mental: ${this.esc(ex.estado_mental || '—')}</div>
+           <h2>Funciones vitales</h2>
+           <div class="box">PA ${ex.pa_sistolica ?? '—'}/${ex.pa_diastolica ?? '—'} mmHg ·
+             FC ${ex.fc ?? '—'} lpm · FR ${ex.fr ?? '—'} rpm · SatO₂ ${ex.sat_o2 ?? '—'}% · T° ${ex.temperatura ?? '—'} °C</div>
+           <h2>Resumen</h2><div class="box">${this.nl(c.examen_fisico || 'Sin hallazgos')}</div>
+           ${await this.htmlMarcadoresExamen(Number(c.id_paciente))}`,
+        ),
+      },
+      {
+        codigo: 'HC_DIAGNOSTICO',
+        titulo: 'Diagnóstico',
+        html: wrap(
+          'Diagnóstico',
+          `<table><thead><tr><th>#</th><th>CIE-10</th><th>Descripción</th><th>Tipo</th></tr></thead><tbody>
+           ${(c.diagnosticos || [])
+             .map(
+               (d: any, i: number) =>
+                 `<tr><td>${i + 1}</td><td>${this.esc(d.codigo_cie10 || '')}</td>
+                  <td>${this.esc(d.descripcion)}</td><td>${this.esc(d.tipo)}</td></tr>`,
+             )
+             .join('')}
+           </tbody></table>
+           <h2>Apreciación</h2><div class="box">${this.nl(c.apreciacion || '—')}</div>`,
+        ),
+      },
+      {
+        codigo: 'HC_PLAN',
+        titulo: 'Plan terapéutico',
+        html: wrap(
+          'Plan terapéutico',
+          `<h2>Medicamentos</h2>
+           ${
+             meds.length
+               ? `<table><thead><tr><th>Medicamento</th><th>Dosis</th><th>Vía</th><th>Frecuencia</th><th>Duración</th></tr></thead><tbody>
+                  ${meds
+                    .map(
+                      (m: any) =>
+                        `<tr><td>${this.esc(m.medicamento)}</td><td>${this.esc(m.dosis || '')}</td>
+                         <td>${this.esc(m.via || '')}</td><td>${this.esc(m.frecuencia || '')}</td>
+                         <td>${this.esc(m.duracion || '')}</td></tr>`,
+                    )
+                    .join('')}
+                  </tbody></table>`
+               : '<div class="box">Sin medicamentos</div>'
+           }
+           <h2>Indicaciones generales</h2>
+           <div class="box">${this.nl(plan.indicaciones_generales || '—')}</div>`,
+        ),
+      },
+    ];
+
+    const saved: any[] = [];
+    for (const d of docs) {
+      const buffer = await this.pdf.generarPdfBuffer(d.html, {
+        sinMargenPagina: true,
+        preferCssPageSize: true,
+      });
+      const row = await this.documentos.guardarPdfGenerado({
+        buffer,
+        idPaciente: Number(c.id_paciente),
+        codigoTipo: d.codigo,
+        idConsulta: Number(c.id_consulta),
+        idCita: c.id_cita ? Number(c.id_cita) : null,
+        titulo: `${d.titulo} — ${paciente}`,
+        userId,
+      });
+      saved.push(row);
+    }
+    return saved;
+  }
+
+  private async htmlMarcadoresExamen(idPaciente: number): Promise<string> {
+    if (!idPaciente) return '';
+    const rows = await this.db.query(
+      `SELECT zona_label, lado, procedimiento, estado, notas
+       FROM cli_mapa_marcador
+       WHERE id_paciente=? AND estado_registro='ACTIVO'
+       ORDER BY id_mapa_marcador`,
+      [idPaciente],
+    );
+    if (!rows?.length) return '';
+    const body = rows
+      .map(
+        (m: any) =>
+          `<tr><td>${this.esc(m.zona_label || '')}</td><td>${this.esc(m.lado || '')}</td>
+           <td>${this.esc(m.procedimiento || '')}</td><td>${this.esc(m.estado || '')}</td>
+           <td>${this.esc(m.notas || '')}</td></tr>`,
+      )
+      .join('');
+    return `<h2>Mapa corporal 3D</h2>
+      <table><thead><tr><th>Zona</th><th>Lado</th><th>Procedimiento</th><th>Estado</th><th>Notas</th></tr></thead>
+      <tbody>${body}</tbody></table>`;
+  }
+
+  private esc(v: any): string {
+    return String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  private nl(v: any): string {
+    return this.esc(v).replace(/\n/g, '<br>');
   }
 
   async removeConsulta(id: number, userId: number) {

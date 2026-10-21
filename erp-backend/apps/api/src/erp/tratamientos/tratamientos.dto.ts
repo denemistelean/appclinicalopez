@@ -32,6 +32,10 @@ export class CreateTratamientoDto {
   @IsOptional() @IsString() @MaxLength(100) categoria?: string;
 
   @IsOptional()
+  @IsIn(['QUIRURGICO', 'NO_QUIRURGICO'])
+  tipo_procedimiento?: string | null;
+
+  @IsOptional()
   @Transform(toNum)
   @IsNumber()
   @Min(1)

@@ -44,6 +44,8 @@ export class SedesComponent {
   salas = signal<any[]>([]);
   equipos = signal<any[]>([]);
   tiposEquipo = signal<any[]>([]);
+  editingSalaId = signal<number | null>(null);
+  editingEquipoId = signal<number | null>(null);
 
   estadosSede = [
     { id: 'ACTIVA', nombre: 'ACTIVA' },
@@ -74,6 +76,7 @@ export class SedesComponent {
       horario_cierre: [''],
       logo_url: [''],
       estado: ['ACTIVA', Validators.required],
+      libre_disposicion: [false],
     });
 
     this.formSala = this.fb.group({
@@ -98,8 +101,15 @@ export class SedesComponent {
     this.activeTab.set(tab);
     const id = this.crud.editingId();
     if (!id) return;
-    if (tab === 'salas') this.cargarSalas(id);
-    if (tab === 'equipos') this.cargarEquipos(id);
+    if (tab === 'salas') {
+      this.cancelarEdicionSala();
+      this.cargarSalas(id);
+    }
+    if (tab === 'equipos') {
+      this.cancelarEdicionEquipo();
+      this.cargarTiposEquipo();
+      this.cargarEquipos(id);
+    }
   }
 
   abrirModal(modalTemplate: TemplateRef<any>, item?: any) {
@@ -107,6 +117,8 @@ export class SedesComponent {
     this.activeTab.set('datos');
     this.salas.set([]);
     this.equipos.set([]);
+    this.cancelarEdicionSala();
+    this.cancelarEdicionEquipo();
 
     if (item) {
       this.alert.showLoading('Cargando sede...');
@@ -115,7 +127,10 @@ export class SedesComponent {
           this.alert.closeLoading();
           const data = res.data?.data || res.data;
           this.crud.setupModal(data.id_sede);
-          this.form.patchValue(data);
+          this.form.patchValue({
+            ...data,
+            libre_disposicion: !!(Number(data.libre_disposicion) === 1 || data.libre_disposicion === true),
+          });
           this.cargarTiposEquipo();
           this.crud.openModal(modalTemplate, { centered: true, backdrop: 'static', size: 'xl' });
         },
@@ -126,7 +141,7 @@ export class SedesComponent {
       });
     } else {
       this.crud.setupModal(null);
-      this.form.reset({ estado: 'ACTIVA' });
+      this.form.reset({ estado: 'ACTIVA', libre_disposicion: false });
       this.crud.openModal(modalTemplate, { centered: true, backdrop: 'static', size: 'xl' });
     }
   }
@@ -157,47 +172,112 @@ export class SedesComponent {
     });
   }
 
-  agregarSala() {
+  editarSala(s: any) {
+    this.editingSalaId.set(Number(s.id_sala));
+    this.formSala.patchValue({
+      nombre: s.nombre || '',
+      capacidad_equipo: s.capacidad_equipo || '',
+      estado: s.estado || 'DISPONIBLE',
+    });
+  }
+
+  cancelarEdicionSala() {
+    this.editingSalaId.set(null);
+    this.formSala.reset({ estado: 'DISPONIBLE' });
+  }
+
+  guardarSala() {
     const id = this.crud.editingId();
     if (!id || this.formSala.invalid) {
       this.formSala.markAllAsTouched();
       return;
     }
-    this.service.createSala(id, this.formSala.getRawValue()).subscribe({
+    const payload = this.formSala.getRawValue();
+    const idSala = this.editingSalaId();
+    const req$ = idSala
+      ? this.service.updateSala(idSala, payload)
+      : this.service.createSala(id, payload);
+    req$.subscribe({
       next: () => {
-        this.alert.success('Sala agregada');
-        this.formSala.reset({ estado: 'DISPONIBLE' });
+        this.alert.success(idSala ? 'Sala actualizada' : 'Sala agregada');
+        this.cancelarEdicionSala();
         this.cargarSalas(id);
       },
-      error: (err: any) => this.alert.error(err.error?.mensaje || err.error?.message || 'Error al guardar sala'),
+      error: (err: any) =>
+        this.alert.error(err.error?.mensaje || err.error?.message || 'Error al guardar sala'),
     });
   }
 
   eliminarSala(idSala: number) {
     const id = this.crud.editingId();
     if (!id) return;
-    this.alert.confirmDelete('¿Eliminar sala?', 'Se desactivará la sala.').then(ok => {
+    this.alert.confirmDelete('¿Eliminar sala?', 'Se desactivará la sala.').then((ok) => {
       if (!ok) return;
       this.service.deleteSala(idSala).subscribe({
-        next: () => { this.alert.success('Sala eliminada'); this.cargarSalas(id); },
+        next: () => {
+          this.alert.success('Sala eliminada');
+          if (this.editingSalaId() === idSala) this.cancelarEdicionSala();
+          this.cargarSalas(id);
+        },
         error: (err: any) => this.alert.error(err.error?.mensaje || 'No se pudo eliminar'),
       });
     });
   }
 
-  agregarEquipo() {
+  editarEquipo(e: any) {
+    this.editingEquipoId.set(Number(e.id_equipo));
+    this.formEquipo.patchValue({
+      nombre: e.nombre || '',
+      id_tipo_equipo: e.id_tipo_equipo || null,
+      tipo: e.tipo || '',
+      numero_serie: e.numero_serie || '',
+      fecha_adquisicion: e.fecha_adquisicion
+        ? String(e.fecha_adquisicion).slice(0, 10)
+        : '',
+      estado: e.estado || 'OPERATIVO',
+    });
+  }
+
+  cancelarEdicionEquipo() {
+    this.editingEquipoId.set(null);
+    this.formEquipo.reset({ estado: 'OPERATIVO' });
+  }
+
+  guardarEquipo() {
     const id = this.crud.editingId();
     if (!id || this.formEquipo.invalid) {
       this.formEquipo.markAllAsTouched();
       return;
     }
-    this.service.createEquipo(id, this.formEquipo.getRawValue()).subscribe({
+    const payload = this.formEquipo.getRawValue();
+    const idEquipo = this.editingEquipoId();
+    const req$ = idEquipo
+      ? this.service.updateEquipo(idEquipo, payload)
+      : this.service.createEquipo(id, payload);
+    req$.subscribe({
       next: () => {
-        this.alert.success('Equipo agregado');
-        this.formEquipo.reset({ estado: 'OPERATIVO' });
+        this.alert.success(idEquipo ? 'Equipo actualizado' : 'Equipo agregado');
+        this.cancelarEdicionEquipo();
         this.cargarEquipos(id);
       },
-      error: (err: any) => this.alert.error(err.error?.mensaje || err.error?.message || 'Error al guardar equipo'),
+      error: (err: any) =>
+        this.alert.error(err.error?.mensaje || err.error?.message || 'Error al guardar equipo'),
+    });
+  }
+
+  eliminarEquipo(idEquipo: number) {
+    const id = this.crud.editingId();
+    if (!id) return;
+    this.alert.confirmDelete('¿Eliminar equipo?', 'Se desactivará el equipo.').then((ok) => {
+      if (!ok) return;
+      this.service.deleteEquipo(idEquipo).subscribe({
+        next: () => {
+          this.alert.success('Equipo eliminado');
+          if (this.editingEquipoId() === idEquipo) this.cancelarEdicionEquipo();
+          this.cargarEquipos(id);
+        },
+        error: (err: any) => this.alert.error(err.error?.mensaje || 'No se pudo eliminar'),
+      });
     });
   }
 }

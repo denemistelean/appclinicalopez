@@ -27,12 +27,18 @@ export class TratamientosComponent implements OnInit {
   private alert = inject(AlertService);
   public perms = inject(PermissionsService);
 
-  public crud = useCrud<any>(this.service as any, { itemName: 'Tratamiento' });
+  public crud = useCrud<any>(this.service as any, { itemName: 'Procedimiento' });
 
   form: FormGroup;
   filtroCategoria = new FormControl('');
+  filtroTipoProc = new FormControl('');
   filtroEstado = new FormControl('');
   especialidades = signal<any[]>([]);
+
+  tiposProcedimiento = [
+    { id: 'QUIRURGICO', nombre: 'Quirúrgico' },
+    { id: 'NO_QUIRURGICO', nombre: 'No quirúrgico / estético' },
+  ];
 
   /** Crear especialidad al vuelo y refrescar el catálogo del select */
   crearEspecialidadTag = async (nombre: string) => {
@@ -71,11 +77,12 @@ export class TratamientosComponent implements OnInit {
       nombre: ['', Validators.required],
       descripcion: [''],
       categoria: [''],
+      tipo_procedimiento: ['NO_QUIRURGICO', Validators.required],
       id_especialidad: [null],
       duracion_minutos: [30, Validators.required],
       precio_base: [0, Validators.required],
       requiere_equipo: [false],
-      requiere_sala: [true],
+      requiere_sala: [false],
       intervalo_minutos: [null],
       estado: ['ACTIVO', Validators.required],
     });
@@ -107,6 +114,7 @@ export class TratamientosComponent implements OnInit {
           this.crud.setupModal(data.id_tratamiento);
           this.form.patchValue({
             ...data,
+            tipo_procedimiento: data.tipo_procedimiento || 'NO_QUIRURGICO',
             precio_base: Number(data.precio_base ?? 0),
             duracion_minutos: Number(data.duracion_minutos ?? 30),
             intervalo_minutos:
@@ -123,7 +131,14 @@ export class TratamientosComponent implements OnInit {
       });
     } else {
       this.crud.setupModal(null);
-      this.form.reset({ duracion_minutos: 30, precio_base: 0, requiere_equipo: false, requiere_sala: true, estado: 'ACTIVO' });
+      this.form.reset({
+        duracion_minutos: 30,
+        precio_base: 0,
+        tipo_procedimiento: 'NO_QUIRURGICO',
+        requiere_equipo: false,
+        requiere_sala: false,
+        estado: 'ACTIVO',
+      });
       this.crud.openModal(modalTemplate, { centered: true, backdrop: 'static', size: 'lg' });
     }
   }

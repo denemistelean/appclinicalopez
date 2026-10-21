@@ -61,31 +61,52 @@ const RECURSOS: Record<string, RecursoCfg> = {
     table: 'cli_paciente_antecedente_patologico',
     pk: 'id_paciente_antecedente_patologico',
     required: ['diagnostico'],
-    cols: ['diagnostico', 'codigo_cie10', 'fecha_diagnostico', 'activo', 'observaciones'],
+    cols: [
+      'diagnostico',
+      'codigo_cie10',
+      'fecha_diagnostico',
+      'activo',
+      'observaciones',
+      'informacion_dudosa',
+    ],
   },
   'antecedentes-personales': {
     table: 'cli_paciente_antecedente_personal',
     pk: 'id_paciente_antecedente_personal',
     required: ['tipo', 'descripcion'],
-    cols: ['tipo', 'descripcion', 'observaciones'],
+    cols: ['tipo', 'descripcion', 'observaciones', 'informacion_dudosa'],
   },
   'antecedentes-quirurgicos': {
     table: 'cli_paciente_antecedente_quirurgico',
     pk: 'id_paciente_antecedente_quirurgico',
     required: ['procedimiento'],
-    cols: ['procedimiento', 'fecha_cirugia', 'institucion', 'observaciones'],
+    cols: [
+      'procedimiento',
+      'fecha_cirugia',
+      'institucion',
+      'observaciones',
+      'informacion_dudosa',
+    ],
   },
   'antecedentes-familiares': {
     table: 'cli_paciente_antecedente_familiar',
     pk: 'id_paciente_antecedente_familiar',
-    required: ['parentesco', 'diagnostico'],
-    cols: ['parentesco', 'diagnostico', 'observaciones'],
+    required: ['parentesco'],
+    cols: ['parentesco', 'diagnostico', 'observaciones', 'informacion_dudosa'],
   },
   alergias: {
     table: 'cli_paciente_alergia_ram',
     pk: 'id_paciente_alergia_ram',
     required: ['sustancia'],
-    cols: ['sustancia', 'tipo', 'reaccion', 'severidad', 'activa', 'observaciones'],
+    cols: [
+      'sustancia',
+      'tipo',
+      'reaccion',
+      'severidad',
+      'activa',
+      'observaciones',
+      'informacion_dudosa',
+    ],
   },
   medicaciones: {
     table: 'cli_paciente_medicacion_habitual',
@@ -100,6 +121,7 @@ const RECURSOS: Record<string, RecursoCfg> = {
       'fecha_fin',
       'activo',
       'observaciones',
+      'informacion_dudosa',
     ],
   },
   'gineco-obstetricos': {
@@ -109,7 +131,11 @@ const RECURSOS: Record<string, RecursoCfg> = {
     cols: [
       'descripcion',
       'menarquia_edad',
+      'regimen_catamenial',
+      'inicio_relaciones_sexuales',
+      'num_parejas_sexuales',
       'fur',
+      'fecha_ultimo_pap',
       'ciclo_dias',
       'gestaciones',
       'partos',
@@ -117,6 +143,7 @@ const RECURSOS: Record<string, RecursoCfg> = {
       'abortos',
       'metodo_anticonceptivo',
       'observaciones',
+      'informacion_dudosa',
     ],
   },
   embarazos: {
@@ -125,13 +152,31 @@ const RECURSOS: Record<string, RecursoCfg> = {
     required: [],
     cols: [
       'fecha_inicio',
+      'fecha_nacimiento',
+      'lugar_nacimiento',
+      'peso_al_nacer',
+      'edad_gestacional_nacer',
       'fum',
       'fpp',
       'semanas_gestacion',
       'estado_embarazo',
+      'dato_embarazo',
       'resultado',
       'observaciones',
+      'informacion_dudosa',
     ],
+  },
+  'antecedentes-oftalmologicos': {
+    table: 'cli_paciente_antecedente_oftalmologico',
+    pk: 'id_paciente_antecedente_oftalmologico',
+    required: ['nombre'],
+    cols: ['nombre', 'comentario', 'informacion_dudosa'],
+  },
+  'notas-adicionales': {
+    table: 'cli_paciente_nota_adicional',
+    pk: 'id_paciente_nota_adicional',
+    required: ['contenido'],
+    cols: ['contenido', 'fecha_nota'],
   },
 };
 
@@ -184,12 +229,25 @@ export class HistoriaPacienteService {
     }
     if (recurso === 'medidas') {
       if (!d.fecha_medida) d.fecha_medida = new Date();
+      // UI envía talla en metros → guardar cm
+      if (d.talla_m != null && d.talla_m !== '' && (d.talla_cm == null || d.talla_cm === '')) {
+        d.talla_cm = Math.round(Number(d.talla_m) * 10000) / 100;
+      }
       if (d.imc == null || d.imc === '') {
         const imc = this.calcImc(d.peso_kg, d.talla_cm);
         if (imc != null) d.imc = imc;
       }
     }
     if (recurso === 'vitales' && !d.fecha_registro) d.fecha_registro = new Date();
+    if (recurso === 'notas-adicionales' && !d.fecha_nota) d.fecha_nota = new Date();
+    if (recurso === 'antecedentes-familiares' && !d.diagnostico) {
+      d.diagnostico = d.observaciones || d.parentesco || '—';
+    }
+    // Normalizar booleanos 0/1
+    for (const flag of ['informacion_dudosa', 'activo', 'activa']) {
+      if (d[flag] === true || d[flag] === 'true' || d[flag] === 1 || d[flag] === '1') d[flag] = 1;
+      else if (d[flag] === false || d[flag] === 'false' || d[flag] === 0 || d[flag] === '0') d[flag] = 0;
+    }
 
     const cols = c.cols.filter((k) => d[k] !== undefined);
     if (!cols.length) throw new BadRequestException('Sin datos para guardar');
@@ -263,42 +321,104 @@ export class HistoriaPacienteService {
 
   async resumen(id: number) {
     await this.paciente(id);
-    const [[medida], [vital], alergias, gineco, counts] = await Promise.all([
-      this.db.query(
-        `SELECT * FROM cli_paciente_medida
-         WHERE id_paciente=? AND estado_registro='ACTIVO'
-         ORDER BY fecha_medida DESC LIMIT 1`,
-        [id],
-      ),
-      this.db.query(
-        `SELECT * FROM cli_paciente_funcion_vital
-         WHERE id_paciente=? AND estado_registro='ACTIVO'
-         ORDER BY fecha_registro DESC LIMIT 1`,
-        [id],
-      ),
-      this.db.query(
-        `SELECT * FROM cli_paciente_alergia_ram
-         WHERE id_paciente=? AND activa=1 AND estado_registro='ACTIVO'`,
-        [id],
-      ),
-      this.getGineco(id),
-      Promise.all(
-        Object.entries(RECURSOS).map(async ([recurso, c]) => {
-          const [r] = await this.db.query(
-            `SELECT COUNT(*) total FROM ${c.table}
-             WHERE id_paciente=? AND estado_registro='ACTIVO'`,
-            [id],
-          );
-          return [recurso, Number(r.total)];
-        }),
-      ),
-    ]);
+    const [[medida], [vital], alergias, gineco, counts, secciones, meta] =
+      await Promise.all([
+        this.db.query(
+          `SELECT * FROM cli_paciente_medida
+           WHERE id_paciente=? AND estado_registro='ACTIVO'
+           ORDER BY fecha_medida DESC LIMIT 1`,
+          [id],
+        ),
+        this.db.query(
+          `SELECT * FROM cli_paciente_funcion_vital
+           WHERE id_paciente=? AND estado_registro='ACTIVO'
+           ORDER BY fecha_registro DESC LIMIT 1`,
+          [id],
+        ),
+        this.db.query(
+          `SELECT * FROM cli_paciente_alergia_ram
+           WHERE id_paciente=? AND activa=1 AND estado_registro='ACTIVO'`,
+          [id],
+        ),
+        this.getGineco(id),
+        Promise.all(
+          Object.entries(RECURSOS).map(async ([recurso, c]) => {
+            const [r] = await this.db.query(
+              `SELECT COUNT(*) total FROM ${c.table}
+               WHERE id_paciente=? AND estado_registro='ACTIVO'`,
+              [id],
+            );
+            return [recurso, Number(r.total)];
+          }),
+        ),
+        Promise.all(
+          Object.entries(RECURSOS).map(async ([recurso, c]) => {
+            const rows = await this.db.query(
+              `SELECT * FROM ${c.table}
+               WHERE id_paciente=? AND estado_registro='ACTIVO'
+               ORDER BY ${c.pk} DESC LIMIT 50`,
+              [id],
+            );
+            return [recurso, rows];
+          }),
+        ),
+        this.db.query(
+          `SELECT seccion, no_refiere FROM cli_paciente_seccion_meta
+           WHERE id_paciente=? AND estado_registro='ACTIVO'`,
+          [id],
+        ),
+      ]);
+
+    const noRefiere: Record<string, boolean> = {};
+    for (const m of meta || []) {
+      noRefiere[String(m.seccion)] = Number(m.no_refiere) === 1;
+    }
+
     return {
       alergias,
       ultima_medida: medida || null,
       ultimos_vitales: vital || null,
       gineco: gineco || null,
       conteos: Object.fromEntries(counts),
+      secciones: Object.fromEntries(secciones),
+      no_refiere: noRefiere,
     };
+  }
+
+  async getSeccionMeta(id: number) {
+    await this.paciente(id);
+    return this.db.query(
+      `SELECT * FROM cli_paciente_seccion_meta
+       WHERE id_paciente=? AND estado_registro='ACTIVO'`,
+      [id],
+    );
+  }
+
+  async setNoRefiere(id: number, seccion: string, noRefiere: boolean, userId: number) {
+    await this.paciente(id);
+    const sec = String(seccion || '').trim().toLowerCase();
+    if (!sec) throw new BadRequestException('seccion requerida');
+    const flag = noRefiere ? 1 : 0;
+    const [ex] = await this.db.query(
+      `SELECT id_paciente_seccion_meta FROM cli_paciente_seccion_meta
+       WHERE id_paciente=? AND seccion=? LIMIT 1`,
+      [id, sec],
+    );
+    if (ex) {
+      await this.db.query(
+        `UPDATE cli_paciente_seccion_meta
+         SET no_refiere=?, estado_registro='ACTIVO', id_usuario_mod=?
+         WHERE id_paciente_seccion_meta=?`,
+        [flag, userId, ex.id_paciente_seccion_meta],
+      );
+      return { seccion: sec, no_refiere: flag };
+    }
+    await this.db.query(
+      `INSERT INTO cli_paciente_seccion_meta
+         (id_paciente, seccion, no_refiere, id_usuario_crea)
+       VALUES (?,?,?,?)`,
+      [id, sec, flag, userId],
+    );
+    return { seccion: sec, no_refiere: flag };
   }
 }
