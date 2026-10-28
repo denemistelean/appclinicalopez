@@ -12,6 +12,7 @@
           <th class="fw-bold border-0">DOCUMENTO</th>
           <th class="fw-bold border-0">PACIENTE</th>
           <th class="fw-bold border-0">TELÉFONO</th>
+          <th class="fw-bold border-0">WHATSAPP</th>
           <th class="fw-bold border-0 text-center">ESTADO</th>
           <th class="text-center border-0">ACCIONES</th>
         </tr>
@@ -22,23 +23,40 @@
             <td class="ps-3 py-3"><div class="fw-bold text-primary-erp">#{{ item.id_paciente }}</div></td>
             <td>{{ item.numero_documento }}</td>
             <td class="fw-bold text-erp text-uppercase">
-              <button type="button"
-                      class="btn btn-link p-0 fw-bold text-erp text-uppercase text-decoration-none"
-                      title="Historia clínica"
-                      (click)="verHistoriaClinica(item.id_paciente)">
-                {{ item.nombres }} {{ item.apellidos }}
-              </button>
+              @if (esSorela()) {
+                <button type="button"
+                        class="btn btn-link p-0 fw-bold text-erp text-uppercase text-decoration-none"
+                        title="Historia digital"
+                        (click)="verHistoriaDigital(item.id_paciente)">
+                  {{ item.nombres }} {{ item.apellidos }}
+                </button>
+              } @else {
+                <button type="button"
+                        class="btn btn-link p-0 fw-bold text-erp text-uppercase text-decoration-none"
+                        title="Historia clínica"
+                        (click)="verHistoriaClinica(item.id_paciente)">
+                  {{ item.nombres }} {{ item.apellidos }}
+                </button>
+              }
             </td>
             <td class="text-muted-erp">{{ item.telefono || '—' }}</td>
+            <td class="text-muted-erp">{{ item.telefono_whatsapp || '—' }}</td>
             <td class="text-center">
               <span class="badge-erp" [class.badge-success]="item.estado === 'ACTIVO'">{{ item.estado }}</span>
             </td>
             <td class="text-center">
               <div class="d-flex justify-content-center gap-2">
-                <button type="button" class="btn-action-edit" title="Historia clínica"
-                        (click)="verHistoriaClinica(item.id_paciente)">
-                  <i class="bi bi-folder2-open"></i>
-                </button>
+                @if (esSorela()) {
+                  <button type="button" class="btn-action-edit" title="Historia digital"
+                          (click)="verHistoriaDigital(item.id_paciente)">
+                    <i class="bi bi-journal-medical"></i>
+                  </button>
+                } @else {
+                  <button type="button" class="btn-action-edit" title="Historia clínica"
+                          (click)="verHistoriaClinica(item.id_paciente)">
+                    <i class="bi bi-folder2-open"></i>
+                  </button>
+                }
                 @if (perms.hasPermission('actualizar_paciente')) {
                   <button type="button" class="btn-action-edit" (click)="abrirModal(modalFormulario, item)">
                     <i class="bi bi-pencil-fill"></i>
@@ -110,6 +128,12 @@
         <div class="col-md-4">
           <label class="form-label">Teléfono alterno</label>
           <input type="text" class="form-control" formControlName="telefono_alterno">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Nro. WhatsApp</label>
+          <input type="text" class="form-control" formControlName="telefono_whatsapp"
+                 placeholder="Ej. 987654321" inputmode="tel">
+          <div class="form-text">Se usa para recordatorios por WhatsApp.</div>
         </div>
         <div class="col-md-4">
           <label class="form-label">Email</label>

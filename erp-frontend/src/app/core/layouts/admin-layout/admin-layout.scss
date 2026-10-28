@@ -40,3 +40,34 @@
 .navbar-title {
     letter-spacing: -0.5px;
 }
+
+.conexion-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.conexion-campo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.12rem;
+    min-width: 11.5rem;
+
+    span {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--erp-text-muted);
+    }
+}
+
+.conexion-btn {
+    height: 31px;
+    padding-inline: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}

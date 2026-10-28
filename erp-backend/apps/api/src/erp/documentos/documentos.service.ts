@@ -16,7 +16,9 @@ import {
   writeFileSync,
 } from 'fs';
 import { dirname, extname, join } from 'path';
+import { resolverDocumentosRoot } from '../../core/archivos/documentos-root';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
+import { UnidadScopeService } from '@app/auth';
 import { TipoDocumentoDto, UpdateDocumentoDto, UpdateTipoDocumentoDto } from './documentos.dto';
 
 @Injectable()
@@ -25,18 +27,19 @@ export class DocumentosService {
     @InjectDataSource('APP_DB_CONN') private readonly db: DataSource,
     private readonly auditoria: AuditoriaService,
     private readonly config: ConfigService,
+    private readonly unidad: UnidadScopeService,
   ) {}
 
   private meta(page: number, limit: number, total: number) {
     return { total, page, limit, lastPage: Math.max(1, Math.ceil(total / Math.max(limit, 1))) };
   }
 
-  /** Raíz configurable; default bajo el proyecto XAMPP */
+  /** Raíz configurable. En Linux de producción no usa la ruta local de Windows. */
   getRoot(): string {
-    return (
-      this.config.get<string>('DOCUMENTOS_ROOT') ||
-      join('D:', 'xampp', 'htdocs', 'appClinicaLopez', 'storage', 'ClinicaDigital')
-    );
+    return resolverDocumentosRoot({
+      configurada: this.config.get<string>('DOCUMENTOS_ROOT'),
+      respaldo: join('D:', 'xampp', 'htdocs', 'appClinicaLopez', 'storage', 'ClinicaDigital'),
+    });
   }
 
   private pad(n: number, len: number) {
@@ -220,6 +223,16 @@ export class DocumentosService {
       );
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
+    const origen = this.unidad.sqlOrigen('d', {
+      consulta: true,
+      cita: true,
+      sede: false,
+      suelto: 'registro',
+    });
+    if (origen.sql) {
+      w.push(origen.sql);
+      params.push(...origen.params);
+    }
     const where = w.join(' AND ');
     const [countRow] = await this.db.query(
       `SELECT COUNT(*) total
@@ -259,6 +272,7 @@ export class DocumentosService {
       [id],
     );
     if (!row) throw new NotFoundException('Documento no encontrado');
+    await this.unidad.exigirOrigen(row, { sede: false, suelto: 'registro' });
     return row;
   }
 
@@ -302,6 +316,20 @@ export class DocumentosService {
       }
       fechaConsulta = cons.fecha_consulta;
       if (!idCita && cons.id_cita) idCita = Number(cons.id_cita);
+      await this.unidad.exigirOrigen(
+        { id_consulta: idConsulta, id_cita: idCita, id_paciente: idPaciente },
+        { sede: false, suelto: 'registro' },
+      );
+    } else if (idCita) {
+      await this.unidad.exigirOrigen(
+        { id_cita: idCita, id_paciente: idPaciente },
+        { sede: false, suelto: 'registro' },
+      );
+    } else {
+      await this.unidad.exigirOrigen(
+        { id_paciente: idPaciente },
+        { sede: false, suelto: 'registro' },
+      );
     }
 
     const ext = extname(file.originalname || '').replace('.', '').toLowerCase() || 'bin';
@@ -433,13 +461,15 @@ export class DocumentosService {
   /** Consultas del paciente para selector de atención */
   async consultasPaciente(idPaciente: number, q: any) {
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 50));
+    const filtro = this.unidad.sqlEmpresa('id_unidad', 'id_sede');
+    const extra = filtro.sql ? ` AND ${filtro.sql}` : '';
     return this.db.query(
       `SELECT id_consulta, id_cita, fecha_consulta, motivo_consulta, estado
        FROM cli_consulta
-       WHERE id_paciente=? AND estado_registro='ACTIVO' AND estado<>'ANULADA'
+       WHERE id_paciente=? AND estado_registro='ACTIVO' AND estado<>'ANULADA'${extra}
        ORDER BY fecha_consulta DESC
        LIMIT ?`,
-      [idPaciente, limit],
+      [idPaciente, ...filtro.params, limit],
     );
   }
 

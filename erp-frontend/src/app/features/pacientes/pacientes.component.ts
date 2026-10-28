@@ -12,6 +12,7 @@ import { ErpTabsComponent, ErpTab } from 'src/app/shared/components/erp-tabs/erp
 import { PermissionsService } from 'src/app/core/services/seguridad/permissions.service';
 import { AlertService } from 'src/app/core/services/ui/alert.service';
 import { PacientesService } from './pacientes.service';
+import { UnidadContextService } from 'src/app/core/services/unidad-context.service';
 
 @Component({
   selector: 'app-pacientes',
@@ -28,6 +29,7 @@ export class PacientesComponent {
   private service = inject(PacientesService);
   private alert = inject(AlertService);
   private router = inject(Router);
+  private unidad = inject(UnidadContextService);
   public perms = inject(PermissionsService);
 
   public crud = useCrud<any>(this.service as any, { itemName: 'Paciente' });
@@ -86,6 +88,7 @@ export class PacientesComponent {
       sexo: [null],
       telefono: [''],
       telefono_alterno: [''],
+      telefono_whatsapp: [''],
       email: [''],
       direccion: [''],
       distrito: [''],
@@ -186,6 +189,15 @@ export class PacientesComponent {
       },
       error: (err: any) => this.alert.error(err.error?.mensaje || 'Error'),
     });
+  }
+
+  esSorela(): boolean {
+    const codigo = this.unidad.membresias().find((m) => m.id_unidad === this.unidad.idUnidad())?.codigo;
+    return String(codigo || '').toUpperCase() === 'SORELA';
+  }
+
+  verHistoriaDigital(id: number) {
+    this.router.navigate(['/pacientes', id, 'historia-digital']);
   }
 
   /** Historia clínica del paciente (Resumen / Atenciones / Archivos / Agenda). */

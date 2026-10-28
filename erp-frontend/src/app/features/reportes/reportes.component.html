@@ -1,106 +1,230 @@
 <div class="rp-wrap">
-  <div class="rp-kpis">
-    <article class="rp-kpi">
-      <div class="rp-kpi-ico"><i class="bi bi-people"></i></div>
-      <div>
-        <div class="rp-kpi-label">Total pacientes</div>
-        <div class="rp-kpi-num">{{ kpis().total }}</div>
-      </div>
-    </article>
-    <article class="rp-kpi">
-      <div class="rp-kpi-ico m"><i class="bi bi-person"></i></div>
-      <div>
-        <div class="rp-kpi-label">Masculino</div>
-        <div class="rp-kpi-num">{{ kpis().masculinos }}</div>
-      </div>
-    </article>
-    <article class="rp-kpi">
-      <div class="rp-kpi-ico f"><i class="bi bi-person"></i></div>
-      <div>
-        <div class="rp-kpi-label">Femenino</div>
-        <div class="rp-kpi-num">{{ kpis().femeninos }}</div>
-      </div>
-    </article>
-    <article class="rp-kpi">
-      <div class="rp-kpi-ico n"><i class="bi bi-person-plus"></i></div>
-      <div>
-        <div class="rp-kpi-label">Nuevos este mes</div>
-        <div class="rp-kpi-num">{{ kpis().nuevos_mes }}</div>
-      </div>
-    </article>
-  </div>
-
-  <section class="rp-panel">
-    <div class="rp-toolbar">
-      <div class="rp-search">
-        <i class="bi bi-search"></i>
-        <input type="text" [formControl]="searchControl" placeholder="Buscar pacientes...">
-      </div>
+  @if (esSorela()) {
+    <div class="rp-tabs">
+      <button type="button" [class.active]="vista() === 'sorela'" (click)="setVista('sorela')">Reportes Sorela</button>
+      <button type="button" [class.active]="vista() === 'pacientes'" (click)="setVista('pacientes')">Padrón</button>
     </div>
+  }
 
-    <div class="table-responsive">
-      <table class="rp-table">
-        <thead>
-          <tr>
-            <th>Paciente</th>
-            <th>Documento</th>
-            <th>Edad</th>
-            <th>Género</th>
-            <th>Teléfono</th>
-            <th>Registro</th>
-          </tr>
-        </thead>
-        <tbody>
-          @if (loading()) {
-            <tr><td colspan="6" class="rp-empty">Cargando pacientes…</td></tr>
-          } @else {
-            @for (p of pacientes(); track p.id_paciente) {
-              <tr>
-                <td>
-                  <div class="rp-pac">
-                    <span class="rp-avatar">{{ iniciales(p) }}</span>
-                    <span class="rp-name">{{ p.nombre_completo || (p.apellidos + ', ' + p.nombres) }}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="rp-doc-tipo">{{ p.tipo_documento || 'DOC' }}</div>
-                  <div class="rp-doc-num">{{ p.numero_documento || '—' }}</div>
-                </td>
-                <td>
-                  <div class="fw-semibold">{{ edadLabel(p) }}</div>
-                  <div class="rp-sub">{{ fechaCorta(p.fecha_nacimiento) }}</div>
-                </td>
-                <td>
-                  <span class="rp-sexo" [class.m]="p.sexo === 'M'" [class.f]="p.sexo === 'F'">
-                    {{ genero(p.sexo) }}
-                  </span>
-                </td>
-                <td>{{ telefono(p) }}</td>
-                <td>{{ fechaCorta(p.fecha_registro) }}</td>
-              </tr>
-            } @empty {
-              <tr><td colspan="6" class="rp-empty">No hay pacientes.</td></tr>
-            }
+  @if (vista() === 'sorela' && esSorela()) {
+    <section class="rp-panel rp-sorela">
+      <div class="rp-toolbar rp-sorela-bar">
+        <div class="rp-sorela-tipos">
+          @for (t of sorelaTipos; track t.id) {
+            <button type="button" class="rp-chip" [class.on]="sorelaTipo() === t.id" (click)="setSorelaTipo(t.id)">
+              {{ t.label }}
+            </button>
           }
-        </tbody>
-      </table>
+        </div>
+        <div class="rp-sorela-fechas">
+          <label>Desde <input type="date" [value]="sorelaDesde()" (change)="onDesde($any($event.target).value)"></label>
+          <label>Hasta <input type="date" [value]="sorelaHasta()" (change)="onHasta($any($event.target).value)"></label>
+          <button type="button" class="btn btn-sm btn-primary" (click)="cargarSorela()">Actualizar</button>
+        </div>
+      </div>
+
+      @if (sorelaLoading()) {
+        <p class="rp-empty">Cargando reporte…</p>
+      } @else if (!sorelaData()) {
+        <p class="rp-empty">Sin datos.</p>
+      } @else {
+        @if (sorelaTipo() === 'resumen') {
+          <div class="rp-kpis">
+            <article class="rp-kpi"><div><div class="rp-kpi-label">Ventas</div><div class="rp-kpi-num">{{ sorelaData().ventas?.total || 0 }}</div><div class="rp-sub">S/ {{ dinero(sorelaData().ventas?.importe) }}</div></div></article>
+            <article class="rp-kpi"><div><div class="rp-kpi-label">Cobrado neto</div><div class="rp-kpi-num">S/ {{ dinero(sorelaData().cobros?.cobrado) }}</div></div></article>
+            <article class="rp-kpi"><div><div class="rp-kpi-label">Pacientes atendidos</div><div class="rp-kpi-num">{{ sorelaData().pacientes_atendidos || 0 }}</div></div></article>
+            <article class="rp-kpi"><div><div class="rp-kpi-label">Sesiones / paquetes</div><div class="rp-kpi-num">{{ sorelaData().sesiones_realizadas || 0 }} / {{ sorelaData().paquetes_vendidos || 0 }}</div></div></article>
+          </div>
+        }
+
+        @if (sorelaTipo() === 'nuevos-recurrentes') {
+          <div class="rp-kpis">
+            <article class="rp-kpi"><div><div class="rp-kpi-label">Pacientes en periodo</div><div class="rp-kpi-num">{{ sorelaData().pacientes_periodo || 0 }}</div></div></article>
+            <article class="rp-kpi"><div><div class="rp-kpi-label">1ª atención Sorela</div><div class="rp-kpi-num">{{ sorelaData().primera_atencion_sorela?.nuevos || 0 }}</div><div class="rp-sub">{{ sorelaData().primera_atencion_sorela?.porcentaje_nuevos || 0 }}%</div></div></article>
+            <article class="rp-kpi"><div><div class="rp-kpi-label">Recurrentes Sorela</div><div class="rp-kpi-num">{{ sorelaData().recurrentes_sorela?.cantidad || 0 }}</div></div></article>
+            <article class="rp-kpi"><div><div class="rp-kpi-label">1ª atención organización</div><div class="rp-kpi-num">{{ sorelaData().primera_atencion_organizacion?.nuevos || 0 }}</div></div></article>
+          </div>
+        }
+
+        @if (sorelaTipo() === 'seguimiento') {
+          <h3 class="rp-h3">Sin próxima cita</h3>
+          <div class="table-responsive">
+            <table class="rp-table">
+              <thead><tr><th>Paciente</th><th>Última atención</th><th>Próxima revisión</th></tr></thead>
+              <tbody>
+                @for (r of sorelaData().sin_proxima_cita || []; track $index) {
+                  <tr><td>{{ r.paciente }}</td><td>{{ fechaCorta(r.ultima_atencion) }}</td><td>{{ fechaCorta(r.proxima_revision) }}</td></tr>
+                } @empty {
+                  <tr><td colspan="3" class="rp-empty">Sin registros</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <h3 class="rp-h3">Inasistencias</h3>
+          <div class="table-responsive">
+            <table class="rp-table">
+              <thead><tr><th>Fecha</th><th>Paciente</th><th>Personal</th></tr></thead>
+              <tbody>
+                @for (r of sorelaData().inasistencias || []; track $index) {
+                  <tr><td>{{ fechaCorta(r.fecha_cita) }}</td><td>{{ r.paciente }}</td><td>{{ r.personal }}</td></tr>
+                } @empty {
+                  <tr><td colspan="3" class="rp-empty">Sin registros</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <h3 class="rp-h3">Controles pendientes (30 días)</h3>
+          <div class="table-responsive">
+            <table class="rp-table">
+              <thead><tr><th>Paciente</th><th>Revisión</th><th>Zona</th></tr></thead>
+              <tbody>
+                @for (r of sorelaData().controles_pendientes || []; track $index) {
+                  <tr><td>{{ r.paciente }}</td><td>{{ fechaCorta(r.proxima_revision) }}</td><td>{{ r.zona || '—' }}</td></tr>
+                } @empty {
+                  <tr><td colspan="3" class="rp-empty">Sin registros</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else if (filasTabla().length || ['cosmiatra','canales','servicios','sesiones-pendientes','saldos','historico','comision-externa'].includes(sorelaTipo())) {
+          @if (sorelaData().nota) {
+            <p class="rp-sub rp-nota">{{ sorelaData().nota }}</p>
+          }
+          <div class="table-responsive">
+            <table class="rp-table">
+              <thead>
+                <tr>
+                  @for (c of columnasFilas(); track c) {
+                    <th>{{ c }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of filasTabla(); track $index) {
+                  <tr>
+                    @for (c of columnasFilas(); track c) {
+                      <td>{{ r[c] == null || r[c] === '' ? '—' : r[c] }}</td>
+                    }
+                  </tr>
+                } @empty {
+                  <tr><td [attr.colspan]="columnasFilas().length || 1" class="rp-empty">Sin registros</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    </section>
+  } @else {
+    <div class="rp-kpis">
+      <article class="rp-kpi">
+        <div class="rp-kpi-ico"><i class="bi bi-people"></i></div>
+        <div>
+          <div class="rp-kpi-label">Total pacientes</div>
+          <div class="rp-kpi-num">{{ kpis().total }}</div>
+        </div>
+      </article>
+      <article class="rp-kpi">
+        <div class="rp-kpi-ico m"><i class="bi bi-person"></i></div>
+        <div>
+          <div class="rp-kpi-label">Masculino</div>
+          <div class="rp-kpi-num">{{ kpis().masculinos }}</div>
+        </div>
+      </article>
+      <article class="rp-kpi">
+        <div class="rp-kpi-ico f"><i class="bi bi-person"></i></div>
+        <div>
+          <div class="rp-kpi-label">Femenino</div>
+          <div class="rp-kpi-num">{{ kpis().femeninos }}</div>
+        </div>
+      </article>
+      <article class="rp-kpi">
+        <div class="rp-kpi-ico n"><i class="bi bi-person-plus"></i></div>
+        <div>
+          <div class="rp-kpi-label">Nuevos este mes</div>
+          <div class="rp-kpi-num">{{ kpis().nuevos_mes }}</div>
+        </div>
+      </article>
     </div>
 
-    <div class="rp-foot">
-      <span>{{ rangoLabel() }}</span>
-      <div class="rp-pager">
-        <label>
-          Mostrar
-          <select [value]="limit()" (change)="cambiarLimite(+$any($event.target).value)">
-            <option [value]="10">10</option>
-            <option [value]="25">25</option>
-            <option [value]="50">50</option>
-          </select>
-        </label>
-        <button type="button" [disabled]="page() <= 1" (click)="irPagina(page() - 1)">‹</button>
-        <span>{{ page() }} / {{ lastPage() }}</span>
-        <button type="button" [disabled]="page() >= lastPage()" (click)="irPagina(page() + 1)">›</button>
+    <section class="rp-panel">
+      <div class="rp-toolbar">
+        <div class="rp-search">
+          <i class="bi bi-search"></i>
+          <input type="text" [formControl]="searchControl" placeholder="Buscar pacientes...">
+        </div>
       </div>
-    </div>
-  </section>
+
+      <div class="table-responsive">
+        <table class="rp-table">
+          <thead>
+            <tr>
+              <th>Paciente</th>
+              <th>Documento</th>
+              <th>Edad</th>
+              <th>Género</th>
+              <th>Teléfono</th>
+              <th>Registro</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (loading()) {
+              <tr><td colspan="6" class="rp-empty">Cargando pacientes…</td></tr>
+            } @else {
+              @for (p of pacientes(); track p.id_paciente) {
+                <tr>
+                  <td>
+                    <div class="rp-pac">
+                      <span class="rp-avatar">{{ iniciales(p) }}</span>
+                      @if (esSorela()) {
+                        <span class="rp-name">{{ p.nombre_completo || (p.apellidos + ', ' + p.nombres) }}</span>
+                      } @else {
+                        <button type="button" class="rp-name rp-name-link" (click)="abrirHistoria(p.id_paciente)">
+                          {{ p.nombre_completo || (p.apellidos + ', ' + p.nombres) }}
+                        </button>
+                      }
+                    </div>
+                  </td>
+                  <td>
+                    <div class="rp-doc-tipo">{{ p.tipo_documento || 'DOC' }}</div>
+                    <div class="rp-doc-num">{{ p.numero_documento || '—' }}</div>
+                  </td>
+                  <td>
+                    <div class="fw-semibold">{{ edadLabel(p) }}</div>
+                    <div class="rp-sub">{{ fechaCorta(p.fecha_nacimiento) }}</div>
+                  </td>
+                  <td>
+                    <span class="rp-sexo" [class.m]="p.sexo === 'M'" [class.f]="p.sexo === 'F'">
+                      {{ genero(p.sexo) }}
+                    </span>
+                  </td>
+                  <td>{{ telefono(p) }}</td>
+                  <td>{{ fechaCorta(p.fecha_registro) }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="rp-empty">No hay pacientes.</td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rp-foot">
+        <span>{{ rangoLabel() }}</span>
+        <div class="rp-pager">
+          <label>
+            Mostrar
+            <select [value]="limit()" (change)="cambiarLimite(+$any($event.target).value)">
+              <option [value]="10">10</option>
+              <option [value]="25">25</option>
+              <option [value]="50">50</option>
+            </select>
+          </label>
+          <button type="button" [disabled]="page() <= 1" (click)="irPagina(page() - 1)">‹</button>
+          <span>{{ page() }} / {{ lastPage() }}</span>
+          <button type="button" [disabled]="page() >= lastPage()" (click)="irPagina(page() + 1)">›</button>
+        </div>
+      </div>
+    </section>
+  }
 </div>

@@ -19,6 +19,7 @@ import { DashboardModule } from './erp/dashboard/dashboard.module';
 import { SedesModule } from './erp/sedes/sedes.module';
 import { PersonalModule } from './erp/personal/personal.module';
 import { TratamientosModule } from './erp/tratamientos/tratamientos.module';
+import { CatalogoModule } from './erp/catalogo/catalogo.module';
 import { InventarioModule } from './erp/inventario/inventario.module';
 import { PacientesModule } from './erp/pacientes/pacientes.module';
 import { HistoriaPacienteModule } from './erp/historia-paciente/historia-paciente.module';
@@ -31,6 +32,8 @@ import { NotificacionesModule } from './erp/notificaciones/notificaciones.module
 import { ReportesModule } from './erp/reportes/reportes.module';
 import { DocumentosModule } from './erp/documentos/documentos.module';
 import { MapaCorporalModule } from './erp/mapa-corporal/mapa-corporal.module';
+import { UnidadesModule } from './erp/unidades/unidades.module';
+import { HistoriaDigitalModule } from './erp/historia-digital/historia-digital.module';
 
 @Module({
   imports: [
@@ -47,6 +50,7 @@ import { MapaCorporalModule } from './erp/mapa-corporal/mapa-corporal.module';
     SedesModule,
     PersonalModule,
     TratamientosModule,
+    CatalogoModule,
     InventarioModule,
     PacientesModule,
     HistoriaPacienteModule,
@@ -59,6 +63,8 @@ import { MapaCorporalModule } from './erp/mapa-corporal/mapa-corporal.module';
     ReportesModule,
     DocumentosModule,
     MapaCorporalModule,
+    UnidadesModule,
+    HistoriaDigitalModule,
   ],
   controllers: [ApiController],
   providers: [ApiService],

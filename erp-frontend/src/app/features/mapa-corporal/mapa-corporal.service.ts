@@ -25,11 +25,19 @@ export class MapaCorporalService {
     return this.http.delete(`${this.apiUrl}/${id}`);
   }
 
-  estadoCapturas(idPaciente: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}/paciente/${idPaciente}/capturas`);
+  estadoCapturas(
+    idPaciente: number,
+    ref?: { id_cita?: number | null; id_consulta?: number | null },
+  ): Observable<any> {
+    return this.http.get(`${this.apiUrl}/paciente/${idPaciente}/capturas`, {
+      params: this.paramsCaptura(ref),
+    });
   }
 
-  guardarCapturas(idPaciente: number, data: { frontal?: string; posterior?: string }): Observable<any> {
+  guardarCapturas(
+    idPaciente: number,
+    data: { frontal?: string; posterior?: string; id_cita?: number | null; id_consulta?: number | null },
+  ): Observable<any> {
     return this.http.post(`${this.apiUrl}/paciente/${idPaciente}/capturas`, data);
   }
 
@@ -40,7 +48,19 @@ export class MapaCorporalService {
     });
   }
 
-  eliminarCapturas(idPaciente: number): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/paciente/${idPaciente}/capturas`);
+  eliminarCapturas(
+    idPaciente: number,
+    ref?: { id_cita?: number | null; id_consulta?: number | null },
+  ): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/paciente/${idPaciente}/capturas`, {
+      params: this.paramsCaptura(ref),
+    });
+  }
+
+  private paramsCaptura(ref?: { id_cita?: number | null; id_consulta?: number | null }) {
+    let params = new HttpParams();
+    if (ref?.id_cita) params = params.set('id_cita', String(ref.id_cita));
+    if (ref?.id_consulta) params = params.set('id_consulta', String(ref.id_consulta));
+    return params;
   }
 }

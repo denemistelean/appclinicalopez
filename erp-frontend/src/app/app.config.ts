@@ -1,5 +1,5 @@
 import { ApplicationConfig, provideAppInitializer, inject, ErrorHandler } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, RouteReuseStrategy } from '@angular/router';
 import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import { firstValueFrom, catchError, of } from 'rxjs';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
@@ -11,11 +11,15 @@ import { errorInterceptor } from './core/interceptors/error.interceptor';
 
 import { PermissionsService } from './core/services/seguridad/permissions.service';
 import { AuthService } from './core/services/auth.service';
+import { UnidadContextService } from './core/services/unidad-context.service';
 import { GlobalErrorHandler } from './core/interceptors/global-error-handler';
+import { RecargaConexion } from './core/layouts/recarga-conexion';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes),
+    RecargaConexion,
+    { provide: RouteReuseStrategy, useExisting: RecargaConexion },
     provideCharts(withDefaultRegisterables()),
     provideHttpClient(
       withFetch(),
@@ -41,17 +45,19 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => {
       const authService = inject(AuthService);
       const permsService = inject(PermissionsService);
+      const unidad = inject(UnidadContextService);
 
-      if (authService.isLoggedIn()) {
-        return firstValueFrom(permsService.loadPermissions().pipe(
-          catchError(() => {
-            permsService.clear();
-            return of(null);
-          })
-        ));
-      }
-
-      return Promise.resolve();
+      return authService.ensureSession().then((vigente) => {
+        if (!vigente) return;
+        return firstValueFrom(unidad.cargar().pipe(catchError(() => of(null)))).then(() =>
+          firstValueFrom(permsService.loadPermissions().pipe(
+            catchError(() => {
+              permsService.clear();
+              return of(null);
+            })
+          )),
+        );
+      });
     })
   ]
 };

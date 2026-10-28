@@ -73,8 +73,4 @@ export class DocumentosService {
   consultasPaciente(idPaciente: number): Observable<any> {
     return this.http.get(`${this.apiUrl}/consultas-paciente/${idPaciente}`);
   }
-
-  getRaiz(): Observable<any> {
-    return this.http.get(`${this.apiUrl}/config/raiz`);
-  }
 }

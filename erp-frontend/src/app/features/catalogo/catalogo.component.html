@@ -1,0 +1,424 @@
+<div class="cat">
+  <div class="cat-barra">
+    <div class="cat-tabs">
+      <button type="button" class="cat-tab" [class.activa]="pestana() === 'servicio'" (click)="elegir('servicio')">
+        <i class="bi bi-calendar3"></i> Servicios
+      </button>
+      <button type="button" class="cat-tab" [class.activa]="pestana() === 'paquete'" (click)="elegir('paquete')">
+        <i class="bi bi-box"></i> Paquetes
+      </button>
+      <button type="button" class="cat-tab" [class.activa]="pestana() === 'tec'" (click)="elegir('tec')">
+        <i class="bi bi-gear"></i> Tecnologías
+      </button>
+      <button type="button" class="cat-tab" [class.activa]="pestana() === 'val'" (click)="elegir('val')">
+        <i class="bi bi-shield-check"></i> Validaciones ({{ avisos().length - 1 }})
+      </button>
+    </div>
+    <label class="cat-fecha">
+      <i class="bi bi-calendar3"></i>
+      <span class="cat-fecha-texto">
+        <small>Vigente al</small>
+        <strong>{{ fechaTexto() }}</strong>
+      </span>
+      <i class="bi bi-chevron-down"></i>
+      <input type="date" [value]="fecha()" (change)="cambiarFecha($any($event.target).value)">
+    </label>
+  </div>
+
+  @if (pestana() !== 'val') {
+    <div class="cat-filtros">
+      <label class="cat-campo">
+        <span class="cat-campo-label"><i class="bi bi-search"></i> Buscar</span>
+        <input [value]="busca()" (input)="cambiarBusca($any($event.target).value)" placeholder="Nombre, código o categoría">
+      </label>
+      @if (pestana() !== 'tec') {
+        <label class="cat-campo">
+          <span class="cat-campo-label"><i class="bi bi-funnel"></i> Categoría</span>
+          <select [value]="categoria()" (change)="cambiarCategoria($any($event.target).value)">
+            <option value="">Todas las categorías</option>
+            @for (c of categorias(); track c) {
+              <option [value]="c">{{ c }}</option>
+            }
+          </select>
+        </label>
+      }
+      @if (pestana() !== 'tec' && perms.hasPermission('crear_tratamiento')) {
+        <button type="button" class="cat-nuevo" (click)="abrirItem(modalItem)">
+          <i class="bi bi-plus-lg"></i>
+          {{ pestana() === 'paquete' ? 'Nuevo paquete' : 'Nuevo servicio' }}
+        </button>
+      }
+      @if (pestana() === 'tec' && perms.hasPermission('crear_tratamiento')) {
+        <button type="button" class="cat-nuevo" (click)="abrirTecnologia(modalTec)">
+          <i class="bi bi-plus-lg"></i> Nueva tecnología
+        </button>
+      }
+    </div>
+  }
+
+  @if (cargando()) {
+    <div class="cat-vacio">Cargando catálogo…</div>
+  } @else if (pestana() === 'val') {
+    <div class="cat-avisos">
+      @for (aviso of avisos(); track aviso.texto) {
+        <div class="cat-aviso" [class.err]="aviso.nivel === 'err'" [class.warn]="aviso.nivel === 'warn'" [class.ok]="aviso.nivel === 'ok'">
+          {{ aviso.nivel === 'err' ? '✖' : aviso.nivel === 'warn' ? '▲' : '✔' }} {{ aviso.texto }}
+        </div>
+      }
+    </div>
+  } @else if (pestana() === 'tec') {
+    <div class="cat-tabla">
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th><i class="bi bi-hash"></i> Código</th>
+              <th><i class="bi bi-gear"></i> Tecnología</th>
+              <th><i class="bi bi-upc"></i> Serie / identificador</th>
+              <th><i class="bi bi-check2-circle"></i> Activo</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (tec of filasTec(); track tec.id_tecnologia) {
+              <tr>
+                <td>
+                  @if (puedeEditar()) {
+                    <button type="button" class="cat-codigo" (click)="abrirTecnologia(modalTec, tec)">{{ tec.codigo }}</button>
+                  } @else {
+                    <span class="cat-codigo">{{ tec.codigo }}</span>
+                  }
+                </td>
+                <td>
+                  @if (puedeEditar()) {
+                    <button type="button" class="cat-nombre" (click)="abrirTecnologia(modalTec, tec)">{{ tec.nombre }}</button>
+                  } @else {
+                    <div class="cat-nombre estatico">{{ tec.nombre }}</div>
+                  }
+                </td>
+                <td class="cat-suave">{{ tec.serie || 'Por registrar' }}</td>
+                <td>
+                  <span class="cat-estado" [class.off]="!tec.activo">{{ tec.activo ? 'Activo' : 'Inactivo' }}</span>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="4" class="cat-vacio">No hay tecnologías.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="cat-pie">
+        <span>Mostrando {{ filasTec().length }} de {{ tecnologiasVisibles().length }} tecnologías</span>
+        <div class="cat-paginas">
+          <button type="button" (click)="irPagina(paginaActual() - 1)" [disabled]="paginaActual() <= 1"><i class="bi bi-chevron-left"></i></button>
+          @for (n of numerosPagina(); track n) {
+            <button type="button" [class.activa]="n === paginaActual()" (click)="irPagina(n)">{{ n }}</button>
+          }
+          <button type="button" (click)="irPagina(paginaActual() + 1)" [disabled]="paginaActual() >= totalPaginas()"><i class="bi bi-chevron-right"></i></button>
+        </div>
+      </div>
+    </div>
+  } @else {
+    <div class="cat-tabla">
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th><i class="bi bi-hash"></i> Código</th>
+              <th><i class="bi" [class.bi-box]="pestana() === 'paquete'" [class.bi-stars]="pestana() === 'servicio'"></i> {{ pestana() === 'servicio' ? 'Servicio' : 'Paquete' }}</th>
+              @if (pestana() === 'paquete') {
+                <th><i class="bi bi-list-ul"></i> Contenido</th>
+                <th class="num"><i class="bi bi-person"></i> Sesiones</th>
+              }
+              <th class="num"><i class="bi bi-tag"></i> Precio vigente</th>
+              @if (pestana() === 'paquete') { <th class="num"><i class="bi bi-cash-stack"></i> Suma tarifas</th> }
+              <th><i class="bi bi-calendar3"></i> Vigencia</th>
+              <th class="acc"><i class="bi bi-gear"></i> Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of filas(); track item.id_item) {
+              <tr>
+                <td>
+                  @if (puedeEditar()) {
+                    <button type="button" class="cat-codigo" (click)="abrirEdicion(modalItem, item)">{{ item.codigo }}</button>
+                  } @else {
+                    <span class="cat-codigo">{{ item.codigo }}</span>
+                  }
+                </td>
+                <td>
+                  @if (puedeEditar()) {
+                    <button type="button" class="cat-nombre" (click)="abrirEdicion(modalItem, item)">{{ item.nombre }}</button>
+                  } @else {
+                    <div class="cat-nombre estatico">{{ item.nombre }}</div>
+                  }
+                  <small>{{ item.categoria }}{{ item.nota ? ' · ' + item.nota : '' }}</small>
+                </td>
+                @if (pestana() === 'paquete') {
+                  <td class="cat-suave">{{ contenido(item) }}</td>
+                  <td class="num">{{ sesiones(item) }}</td>
+                }
+                <td class="num">
+                  @if (precio(item); as vigente) {
+                    <span class="cat-precio">{{ soles(vigente.monto) }}</span>
+                  } @else if (item.sin_tarifa) {
+                    <span class="cat-suave">Sin tarifa propia</span>
+                  } @else {
+                    <span class="cat-falta">Sin precio vigente</span>
+                  }
+                </td>
+                @if (pestana() === 'paquete') {
+                  <td class="num">
+                    @if (suma(item); as total) {
+                      <span class="cat-precio">{{ soles(total.total) }}{{ total.faltan ? '*' : '' }}</span>
+                    } @else { <span class="cat-suave">—</span> }
+                  </td>
+                }
+                <td class="cat-suave">
+                  @if (precio(item); as vigente) {
+                    {{ vigente.vigente_desde }} → {{ vigente.vigente_hasta || 'sin fin' }}
+                  } @else { — }
+                </td>
+                <td class="acc">
+                  <button type="button" class="cat-accion" (click)="historico(item)">
+                    <i class="bi bi-clock-history"></i> Histórico ({{ item.vigencias.length }})
+                  </button>
+                  @if (!item.sin_tarifa && perms.hasPermission('actualizar_tratamiento')) {
+                    <button type="button" class="cat-accion" (click)="abrirPrecio(modalPrecio, item)">
+                      <i class="bi bi-tag"></i> Nuevo precio
+                    </button>
+                  }
+                </td>
+              </tr>
+              @if (abierto() === item.id_item) {
+                <tr class="cat-historico">
+                  <td [attr.colspan]="pestana() === 'paquete' ? 8 : 5">
+                    <div class="cat-historico-titulo">Histórico de precios</div>
+                    <table>
+                      <thead>
+                        <tr><th>Desde</th><th>Hasta</th><th class="num">Monto</th><th>Estado</th><th>Motivo</th></tr>
+                      </thead>
+                      <tbody>
+                        @for (v of item.vigencias.slice().reverse(); track v.vigente_desde + v.monto + v.motivo) {
+                          <tr>
+                            <td>{{ v.vigente_desde }}</td>
+                            <td>{{ v.vigente_hasta || 'sin fin' }}</td>
+                            <td class="num">{{ soles(v.monto) }}</td>
+                            <td>
+                              <span class="cat-estado"
+                                    [class.off]="estado(v, fecha()) === 'Histórico'"
+                                    [class.futuro]="estado(v, fecha()) === 'Futuro'">{{ estado(v, fecha()) }}</span>
+                            </td>
+                            <td>{{ v.motivo }}</td>
+                          </tr>
+                        } @empty {
+                          <tr><td colspan="5">Sin tarifas registradas.</td></tr>
+                        }
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              }
+            } @empty {
+              <tr><td colspan="8" class="cat-vacio">No hay registros para este filtro.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="cat-pie">
+        <span>Mostrando {{ filas().length }} de {{ visibles().length }} {{ nombreLista() }}</span>
+        <div class="cat-paginas">
+          <button type="button" (click)="irPagina(paginaActual() - 1)" [disabled]="paginaActual() <= 1"><i class="bi bi-chevron-left"></i></button>
+          @for (n of numerosPagina(); track n) {
+            <button type="button" [class.activa]="n === paginaActual()" (click)="irPagina(n)">{{ n }}</button>
+          }
+          <button type="button" (click)="irPagina(paginaActual() + 1)" [disabled]="paginaActual() >= totalPaginas()"><i class="bi bi-chevron-right"></i></button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
+
+<ng-template #modalPrecio let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">Nuevo precio — {{ precioDe()?.nombre }}</h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="precioForm" class="row g-3">
+      <div class="col-12">
+        <label class="form-label">Monto (S/)</label>
+        <input type="number" min="0" step="0.01" class="form-control" formControlName="monto">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Vigente desde</label>
+        <input type="date" class="form-control" formControlName="vigente_desde">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Vigente hasta</label>
+        <input type="date" class="form-control" formControlName="vigente_hasta">
+        <small class="text-muted-erp">Vacío = sin fin</small>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Motivo del cambio</label>
+        <textarea class="form-control" rows="2" formControlName="motivo"></textarea>
+      </div>
+    </form>
+  </div>
+  <div class="modal-footer bg-card border-0">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">Cancelar</button>
+    <button type="button" class="btn btn-primary" (click)="guardarPrecio(modal)">Guardar</button>
+  </div>
+</ng-template>
+
+<ng-template #modalItem let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">
+      {{ editando()
+        ? (editando()!.tipo === 'paquete' ? 'Editar paquete' : 'Editar servicio')
+        : (pestana() === 'paquete' ? 'Nuevo paquete' : 'Nuevo servicio') }}
+      @if (editando()) { <small class="text-muted-erp fw-normal">{{ editando()!.codigo }}</small> }
+    </h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="itemForm" class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label">Nombre</label>
+        <input class="form-control" formControlName="nombre">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Categoría</label>
+        <input class="form-control" formControlName="categoria">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Sesiones</label>
+        <input type="number" min="1" class="form-control" formControlName="sesiones">
+      </div>
+      @if ((itemForm.value.sesiones || 0) > 1 || (editando()?.sesiones || 0) > 1 || pestana() === 'paquete') {
+        <div class="col-md-4">
+          <label class="form-label">Intervalo sugerido entre sesiones (días)</label>
+          <input type="number" min="1" class="form-control" formControlName="intervalo_dias_sugerido"
+                 placeholder="Ej. 15">
+          <small class="text-muted-erp">Solo orientación al programar; no bloquea la agenda.</small>
+        </div>
+      }
+      <div class="col-12">
+        <label class="form-label">Nota</label>
+        <textarea class="form-control" rows="2" formControlName="nota"></textarea>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Descuento %</label>
+        <input type="number" min="0" max="100" step="0.01" class="form-control" formControlName="descuento_pct">
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Nombre de promoción</label>
+        <input class="form-control" formControlName="promo_nombre" placeholder="Opcional">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Promo desde</label>
+        <input type="date" class="form-control" formControlName="promo_desde">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Promo hasta</label>
+        <input type="date" class="form-control" formControlName="promo_hasta">
+      </div>
+      @if ((editando()?.tipo || pestana()) === 'servicio') {
+        <div class="col-12">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" formControlName="sin_tarifa" id="sinTarifa">
+            <label class="form-check-label" for="sinTarifa">Sin tarifa propia (solo componente de paquetes)</label>
+          </div>
+        </div>
+      }
+      @if (!editando() && ((pestana() === 'paquete') || !itemForm.value.sin_tarifa)) {
+        <div class="col-md-4">
+          <label class="form-label">Precio inicial</label>
+          <input type="number" min="0" step="0.01" class="form-control" formControlName="monto">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Vigente desde</label>
+          <input type="date" class="form-control" formControlName="vigente_desde">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Motivo</label>
+          <input class="form-control" formControlName="motivo">
+        </div>
+      }
+      @if (editando()?.tipo === 'servicio' && !itemForm.value.sin_tarifa && !editando()!.vigencias.length) {
+        <div class="col-md-4">
+          <label class="form-label">Precio inicial</label>
+          <input type="number" min="0" step="0.01" class="form-control" formControlName="monto">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Vigente desde</label>
+          <input type="date" class="form-control" formControlName="vigente_desde">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Motivo</label>
+          <input class="form-control" formControlName="motivo">
+        </div>
+      }
+      @if (editando() && editando()!.vigencias.length && !itemForm.value.sin_tarifa) {
+        <div class="col-12">
+          <small class="text-muted-erp">El precio vigente se cambia con Nuevo precio, para conservar el histórico.</small>
+        </div>
+      }
+      @if ((editando()?.tipo || pestana()) === 'paquete') {
+        <div class="col-12">
+          <label class="form-label">Contenido</label>
+          @for (c of componentesBorrador(); track $index) {
+            <div class="row g-2 mb-2">
+              <div class="col-7">
+                <ng-select class="ng-select-sm" [items]="servicios()" bindLabel="nombre" bindValue="id_item"
+                           [(ngModel)]="c.id_servicio" [ngModelOptions]="{standalone: true}" placeholder="Servicio" appendTo="body"></ng-select>
+              </div>
+              <div class="col-3">
+                <input type="number" min="1" class="form-control" [(ngModel)]="c.cantidad" [ngModelOptions]="{standalone: true}" placeholder="Cantidad">
+              </div>
+              <div class="col-2">
+                <button type="button" class="btn btn-soft-neutral w-100" (click)="quitarComponente($index)">Quitar</button>
+              </div>
+            </div>
+          }
+          <button type="button" class="btn btn-sm btn-soft-neutral" (click)="componentesBorrador.update((l) => [...l, { id_servicio: null, cantidad: 1 }])">Agregar componente</button>
+        </div>
+      }
+    </form>
+  </div>
+  <div class="modal-footer bg-card border-0">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">Cancelar</button>
+    <button type="button" class="btn btn-primary" (click)="guardarItem(modal)">Guardar</button>
+  </div>
+</ng-template>
+
+<ng-template #modalTec let-modal>
+  <div class="modal-header border-bottom-dashed-erp bg-erp px-4 py-3">
+    <h5 class="modal-title fw-bold text-erp">
+      {{ tecEditando() ? 'Editar tecnología' : 'Nueva tecnología' }}
+      @if (tecEditando()) { <small class="text-muted-erp fw-normal">{{ tecEditando()!.codigo }}</small> }
+    </h5>
+    <button type="button" class="btn-close shadow-none" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body p-4 bg-card">
+    <form [formGroup]="tecForm" class="row g-3">
+      <div class="col-12">
+        <label class="form-label">Nombre</label>
+        <input class="form-control" formControlName="nombre">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Serie / identificador</label>
+        <input class="form-control" formControlName="serie" placeholder="Por registrar">
+      </div>
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" formControlName="activo" id="tecActivo">
+          <label class="form-check-label" for="tecActivo">Activo</label>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div class="modal-footer bg-card border-0">
+    <button type="button" class="btn btn-soft-neutral" (click)="modal.dismiss()">Cancelar</button>
+    <button type="button" class="btn btn-primary" (click)="guardarTecnologia(modal)">Guardar</button>
+  </div>
+</ng-template>

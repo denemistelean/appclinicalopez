@@ -30,8 +30,8 @@ export class MapaCorporalController {
   // Capturas 3D del informe: lectura con permiso de paciente
   @RequirePermissions('PACIENTES', 'ver_paciente')
   @Get('paciente/:idPaciente/capturas')
-  estadoCapturas(@Param('idPaciente', ParseIntPipe) idPaciente: number) {
-    return this.service.estadoCapturas(idPaciente);
+  estadoCapturas(@Param('idPaciente', ParseIntPipe) idPaciente: number, @Query() q: any) {
+    return this.service.estadoCapturas(idPaciente, this.refCaptura(q));
   }
 
   @RequirePermissions('PACIENTES', 'ver_paciente')
@@ -39,18 +39,19 @@ export class MapaCorporalController {
   getCaptura(
     @Param('idPaciente', ParseIntPipe) idPaciente: number,
     @Param('vista') vista: string,
+    @Query() q: any,
   ) {
     if (vista !== 'frontal' && vista !== 'posterior') {
       throw new BadRequestException('Vista inválida (frontal|posterior)');
     }
-    return this.service.getCaptura(idPaciente, vista);
+    return this.service.getCaptura(idPaciente, vista, this.refCaptura(q));
   }
 
   @RequirePermissions('MAPA_CORPORAL', 'actualizar_mapa_marcador')
   @Post('paciente/:idPaciente/capturas')
   guardarCapturas(
     @Param('idPaciente', ParseIntPipe) idPaciente: number,
-    @Body() body: { frontal?: string; posterior?: string },
+    @Body() body: { frontal?: string; posterior?: string; id_cita?: number | null; id_consulta?: number | null },
     @Req() r: any,
   ) {
     return this.service.guardarCapturas(idPaciente, body || {}, r.user.userId);
@@ -58,8 +59,21 @@ export class MapaCorporalController {
 
   @RequirePermissions('MAPA_CORPORAL', 'eliminar_mapa_marcador')
   @Delete('paciente/:idPaciente/capturas')
-  eliminarCapturas(@Param('idPaciente', ParseIntPipe) idPaciente: number, @Req() r: any) {
-    return this.service.eliminarCapturas(idPaciente, r.user.userId);
+  eliminarCapturas(
+    @Param('idPaciente', ParseIntPipe) idPaciente: number,
+    @Query() q: any,
+    @Req() r: any,
+  ) {
+    return this.service.eliminarCapturas(idPaciente, r.user.userId, this.refCaptura(q));
+  }
+
+  private refCaptura(q: any) {
+    const idCita = Number(q?.id_cita);
+    const idConsulta = Number(q?.id_consulta);
+    return {
+      id_cita: Number.isFinite(idCita) && idCita > 0 ? idCita : null,
+      id_consulta: Number.isFinite(idConsulta) && idConsulta > 0 ? idConsulta : null,
+    };
   }
 
   @RequirePermissions('MAPA_CORPORAL', 'ver_mapa_corporal')

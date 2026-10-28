@@ -2,6 +2,7 @@ import {
   Component,
   ChangeDetectionStrategy,
   OnInit,
+  computed,
   inject,
   signal,
   ElementRef,
@@ -13,6 +14,8 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 import { AlertService } from 'src/app/core/services/ui/alert.service';
+import { UnidadContextService } from 'src/app/core/services/unidad-context.service';
+import { marcaDeEmpresa } from 'src/app/core/marca-empresa';
 import { ReportesService } from '../reportes/reportes.service';
 import { MapaCorporalService } from '../mapa-corporal/mapa-corporal.service';
 import { ZONAS_ANATOMICAS } from '../mapa-corporal/mapa-corporal.zones';
@@ -62,6 +65,7 @@ const LABELS: Record<string, string> = {
   estado_civil: 'Estado civil',
   telefono: 'Teléfono',
   telefono_alterno: 'Teléfono alterno',
+  telefono_whatsapp: 'Nro. WhatsApp',
   email: 'Email',
   direccion: 'Dirección',
   distrito: 'Distrito',
@@ -192,6 +196,10 @@ export class PacienteInformeComponent implements OnInit {
   private mapaService = inject(MapaCorporalService);
   private alert = inject(AlertService);
   private datePipe = inject(DatePipe);
+  private unidad = inject(UnidadContextService);
+  readonly marca = computed(() => marcaDeEmpresa(
+    this.unidad.membresias().find((m) => m.id_unidad === this.unidad.idUnidad())?.codigo,
+  ));
 
   @ViewChild('hojaPdf') hojaPdf?: ElementRef<HTMLElement>;
 

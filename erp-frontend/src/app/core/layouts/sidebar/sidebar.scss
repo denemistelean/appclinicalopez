@@ -245,6 +245,14 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+
+  &.una-linea {
+    white-space: nowrap;
+    font-size: 0.58rem;
+    letter-spacing: 0;
+    padding-right: 0.35rem;
+    padding-left: 1.35rem;
+  }
   padding: 0.45rem 1.25rem 0.45rem 2.75rem;
   color: rgba(255,255,255,0.72);
   text-decoration: none;

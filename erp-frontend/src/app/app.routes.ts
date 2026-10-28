@@ -48,6 +48,13 @@ export const routes: Routes = [
         data: { permiso: 'ver_personal' },
       },
       {
+        // Catálogo de tarifas de Sorela Medic
+        path: 'catalogo',
+        loadComponent: () => import('./features/catalogo/catalogo.component').then(m => m.CatalogoComponent),
+        canActivate: [permissionGuard],
+        data: { permiso: 'ver_tratamiento' },
+      },
+      {
         path: 'tratamientos',
         loadComponent: () => import('./features/tratamientos/tratamientos.component').then(m => m.TratamientosComponent),
         canActivate: [permissionGuard],
@@ -62,6 +69,20 @@ export const routes: Routes = [
       {
         path: 'pacientes',
         loadComponent: () => import('./features/pacientes/pacientes.component').then(m => m.PacientesComponent),
+        canActivate: [permissionGuard],
+        data: { permiso: 'ver_paciente' },
+      },
+      {
+        path: 'citas/:id/atencion',
+        loadComponent: () =>
+          import('./features/historia-digital/atencion-cita.component').then((m) => m.AtencionCitaComponent),
+        canActivate: [permissionGuard],
+        data: { permiso: 'ver_paciente' },
+      },
+      {
+        path: 'pacientes/:id/historia-digital',
+        loadComponent: () =>
+          import('./features/historia-digital/historia-digital.component').then((m) => m.HistoriaDigitalComponent),
         canActivate: [permissionGuard],
         data: { permiso: 'ver_paciente' },
       },

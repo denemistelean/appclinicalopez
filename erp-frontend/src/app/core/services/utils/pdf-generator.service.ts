@@ -339,7 +339,7 @@ export class PdfGeneratorService {
       doc.setPage(i);
       doc.setFontSize(7);
       doc.setTextColor(180);
-      doc.text('Clinica Lopez - Informacion Confidencial', 14, 287);
+      doc.text('Clínica Estética López - Información confidencial', 14, 287);
       doc.text(`Página ${i} de ${pages}`, 190, 285, { align: 'right' });
     }
   }

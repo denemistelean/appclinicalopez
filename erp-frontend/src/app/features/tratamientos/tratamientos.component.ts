@@ -1,6 +1,7 @@
 import { Component, inject, OnInit, TemplateRef, ChangeDetectionStrategy, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormControl } from '@angular/forms';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NgbModalModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { firstValueFrom } from 'rxjs';
@@ -12,6 +13,7 @@ import { PermissionsService } from 'src/app/core/services/seguridad/permissions.
 import { AlertService } from 'src/app/core/services/ui/alert.service';
 import { TratamientosService } from './tratamientos.service';
 import { PersonalService } from '../personal/personal.service';
+import { UnidadContextService } from 'src/app/core/services/unidad-context.service';
 
 @Component({
   selector: 'app-tratamientos',
@@ -25,14 +27,13 @@ export class TratamientosComponent implements OnInit {
   private service = inject(TratamientosService);
   private personalService = inject(PersonalService);
   private alert = inject(AlertService);
+  private router = inject(Router);
+  private unidad = inject(UnidadContextService);
   public perms = inject(PermissionsService);
 
   public crud = useCrud<any>(this.service as any, { itemName: 'Procedimiento' });
 
   form: FormGroup;
-  filtroCategoria = new FormControl('');
-  filtroTipoProc = new FormControl('');
-  filtroEstado = new FormControl('');
   especialidades = signal<any[]>([]);
 
   tiposProcedimiento = [
@@ -89,6 +90,11 @@ export class TratamientosComponent implements OnInit {
   }
 
   ngOnInit() {
+    const codigo = this.unidad.membresias().find((m) => m.id_unidad === this.unidad.idUnidad())?.codigo;
+    if (String(codigo || '').toUpperCase() === 'SORELA') {
+      this.router.navigateByUrl('/catalogo');
+      return;
+    }
     this.personalService.listEspecialidades().subscribe({
       next: (res: any) => this.especialidades.set(res.data?.data || res.data || res || []),
       error: () => this.especialidades.set([]),
@@ -96,12 +102,6 @@ export class TratamientosComponent implements OnInit {
   }
 
   onSearch(term: string) { this.crud.searchControl.setValue(term); }
-
-  aplicarFiltros() {
-    this.crud.page.set(1);
-    // useCrud only sends search; refresh with custom findAll via service wrapper
-    this.crud.refresh();
-  }
 
   abrirModal(modalTemplate: TemplateRef<any>, item?: any) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();

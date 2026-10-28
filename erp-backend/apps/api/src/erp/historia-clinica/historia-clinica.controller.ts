@@ -61,6 +61,12 @@ export class HistoriaClinicaController {
     return this.service.medicamentos(q);
   }
 
+  @RequirePermissions('HISTORIA_CLINICA', 'actualizar_historia_clinica')
+  @Post('medicamentos')
+  crearMedicamento(@Body() d: { nombre?: string }, @Req() r: any) {
+    return this.service.crearMedicamento(d || {}, r.user.userId);
+  }
+
   @RequirePermissions('HISTORIA_CLINICA', 'ver_historia_clinica')
   @Get('consultas')
   list(@Query() q: any) {

@@ -55,4 +55,14 @@ export class ReportesService {
   getInformePaciente(idPaciente: number): Observable<any> {
     return this.http.get(`${this.apiUrl}/paciente/${idPaciente}`);
   }
+
+  getSorela(tipo: string, params?: Record<string, any>): Observable<any> {
+    let httpParams = new HttpParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v != null && v !== '') httpParams = httpParams.set(k, String(v));
+      });
+    }
+    return this.http.get(`${this.apiUrl}/sorela/${encodeURIComponent(tipo)}`, { params: httpParams });
+  }
 }

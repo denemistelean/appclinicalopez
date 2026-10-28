@@ -20,6 +20,18 @@ export class ReportesController {
     return this.s.pacientes(q);
   }
 
+  @RequirePermissions('REPORTES', 'ver_reporte')
+  @Get('sorela')
+  sorela(@Query() q: any) {
+    return this.s.sorela(String(q.tipo || 'resumen'), q);
+  }
+
+  @RequirePermissions('REPORTES', 'ver_reporte')
+  @Get('sorela/:tipo')
+  sorelaTipo(@Param('tipo') tipo: string, @Query() q: any) {
+    return this.s.sorela(tipo, q);
+  }
+
   /** Informe integral por paciente (lectura vía permiso de paciente). */
   @RequirePermissions('PACIENTES', 'ver_paciente')
   @Get('paciente/:id')

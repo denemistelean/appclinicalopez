@@ -28,14 +28,14 @@ export class AgendaController {
 
   @RequirePermissions('AGENDA', 'ver_cita')
   @Get('dia')
-  dia(@Query() q: any) {
-    return this.service.dia(q);
+  dia(@Query() q: any, @Req() r: any) {
+    return this.service.dia({ ...q, _userId: r.user?.userId });
   }
 
   @RequirePermissions('AGENDA', 'ver_cita')
   @Get('semana')
-  semana(@Query() q: any) {
-    return this.service.semana(q);
+  semana(@Query() q: any, @Req() r: any) {
+    return this.service.semana({ ...q, _userId: r.user?.userId });
   }
 
   @RequirePermissions('AGENDA', 'ver_cita')
@@ -74,8 +74,8 @@ export class AgendaController {
 
   @RequirePermissions('AGENDA', 'ver_cita')
   @Get('citas')
-  list(@Query() q: any) {
-    return this.service.list(q);
+  list(@Query() q: any, @Req() r: any) {
+    return this.service.list({ ...q, _userId: r.user?.userId });
   }
 
   @RequirePermissions('AGENDA', 'ver_cita')

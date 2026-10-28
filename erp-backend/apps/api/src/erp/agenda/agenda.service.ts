@@ -6,6 +6,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { AuditoriaService } from '@app/common';
+import { UnidadScopeService } from '@app/auth';
 import { DataSource } from 'typeorm';
 import {
   CancelarCitaDto,
@@ -15,6 +16,7 @@ import {
   ParticipanteCitaDto,
   UpdateCitaDto,
 } from './agenda.dto';
+import { debeLiberarVinculoSesion } from './reprogramar-sesion';
 
 type Step = { pass: boolean; soft?: boolean; msg: string; codigo?: string };
 
@@ -24,6 +26,7 @@ export class AgendaService {
     @InjectDataSource('APP_DB_CONN') private readonly db: DataSource,
     private readonly auditoria: AuditoriaService,
     private readonly events: EventEmitter2,
+    private readonly unidad: UnidadScopeService,
   ) {}
 
   private meta(page: number, limit: number, total: number) {
@@ -112,6 +115,14 @@ export class AgendaService {
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
     const w = [`c.estado_registro='ACTIVO'`];
     const p: any[] = [];
+    const idPersonalScope = await this.personalScopeUsuario(q._userId);
+    if (idPersonalScope) {
+      w.push(`(c.id_personal=? OR EXISTS (
+        SELECT 1 FROM cli_cita_recurso_humano rh
+        WHERE rh.id_cita=c.id_cita AND rh.id_personal=? AND rh.estado_registro='ACTIVO'
+      ))`);
+      p.push(idPersonalScope, idPersonalScope);
+    }
     for (const [k, col] of [
       ['id_sede', 'c.id_sede'],
       ['id_personal', 'c.id_personal'],
@@ -123,6 +134,12 @@ export class AgendaService {
         w.push(`${col}=?`);
         p.push(String(k).startsWith('id_') ? Number(q[k]) : q[k]);
       }
+    }
+    if (q.id_sede) await this.unidad.exigirSede(Number(q.id_sede));
+    const filtro = this.unidad.sqlEmpresa('c.id_unidad', 'c.id_sede');
+    if (filtro.sql) {
+      w.push(filtro.sql);
+      p.push(...filtro.params);
     }
     const [c] = await this.db.query(
       `SELECT COUNT(*) total FROM cli_cita c WHERE ${w.join(' AND ')}`,
@@ -177,6 +194,7 @@ export class AgendaService {
       [id],
     );
     if (!r) throw new NotFoundException('Cita no encontrada');
+    await this.unidad.exigirRegistro(r.id_unidad, r.id_sede);
     const participantes = await this.db.query(
       `SELECT rh.*, CONCAT(pe.nombres,' ',pe.apellidos) personal, rr.codigo rol_codigo, rr.nombre rol_nombre
        FROM cli_cita_recurso_humano rh
@@ -202,16 +220,30 @@ export class AgendaService {
   }
 
   /** Vista día: carriles + citas para timeline multi-recurso */
+  /** Si el usuario tiene id_personal, solo ve su agenda (cosmiatra). */
+  private async personalScopeUsuario(userId?: number): Promise<number | null> {
+    const id = Number(userId || 0);
+    if (!id) return null;
+    const [u] = await this.db.query(
+      `SELECT id_personal FROM sis_usuario WHERE id_usuario = ? AND estado_registro = 'ACTIVO'`,
+      [id],
+    );
+    return u?.id_personal != null ? Number(u.id_personal) : null;
+  }
+
   async dia(q: any) {
     const fecha = String(q.fecha || '').slice(0, 10);
     const idSede = Number(q.id_sede);
     if (!fecha || !idSede) throw new BadRequestException('fecha e id_sede requeridos');
+    await this.unidad.exigirSede(idSede);
+    const idPersonalScope = await this.personalScopeUsuario(q._userId);
 
     const profesionales = await this.db.query(
       `SELECT p.id_personal AS id, CONCAT(p.nombres,' ',p.apellidos) AS nombre,
               p.especialidad AS rol, 'prof' AS kind
        FROM cli_personal p
        WHERE p.estado='ACTIVO' AND p.estado_registro='ACTIVO'
+         AND (? IS NULL OR p.id_personal = ?)
          AND (
            p.id_sede_principal=?
            OR EXISTS (
@@ -220,7 +252,7 @@ export class AgendaService {
            )
          )
        ORDER BY p.apellidos, p.nombres`,
-      [idSede, idSede],
+      [idPersonalScope, idPersonalScope || 0, idSede, idSede],
     );
 
     const salas = await this.db.query(
@@ -265,8 +297,12 @@ export class AgendaService {
        LEFT JOIN cli_tipo_cita tc ON tc.id_tipo_cita=c.id_tipo_cita
        WHERE c.id_sede=? AND c.fecha_cita=? AND c.estado_registro='ACTIVO'
          AND c.estado NOT IN ('CANCELADA','NO_ASISTIO')
+         AND (? IS NULL OR c.id_personal = ? OR EXISTS (
+           SELECT 1 FROM cli_cita_recurso_humano rh
+           WHERE rh.id_cita=c.id_cita AND rh.id_personal=? AND rh.estado_registro='ACTIVO'
+         ))
        ORDER BY c.hora_inicio`,
-      [idSede, fecha],
+      [idSede, fecha, idPersonalScope, idPersonalScope || 0, idPersonalScope || 0],
     );
 
     const ids = citas.map((c: any) => Number(c.id_cita));
@@ -316,16 +352,21 @@ export class AgendaService {
     const desde = String(q.desde || '').slice(0, 10);
     const hasta = String(q.hasta || '').slice(0, 10);
     const idSede = Number(q.id_sede);
-    const idPersonal = q.id_personal != null && q.id_personal !== '' ? Number(q.id_personal) : null;
+    const idPersonalScope = await this.personalScopeUsuario(q._userId);
+    const idPersonalQ =
+      q.id_personal != null && q.id_personal !== '' ? Number(q.id_personal) : null;
+    const idPersonal = idPersonalScope ?? idPersonalQ;
     if (!desde || !hasta || !idSede) {
       throw new BadRequestException('desde, hasta e id_sede requeridos');
     }
+    await this.unidad.exigirSede(idSede);
 
     const profesionales = await this.db.query(
       `SELECT p.id_personal AS id, CONCAT(p.nombres,' ',p.apellidos) AS nombre,
               p.especialidad AS rol, 'prof' AS kind
        FROM cli_personal p
        WHERE p.estado='ACTIVO' AND p.estado_registro='ACTIVO'
+         AND (? IS NULL OR p.id_personal = ?)
          AND (
            p.id_sede_principal=?
            OR EXISTS (
@@ -334,7 +375,7 @@ export class AgendaService {
            )
          )
        ORDER BY p.apellidos, p.nombres`,
-      [idSede, idSede],
+      [idPersonalScope, idPersonalScope || 0, idSede, idSede],
     );
 
     const params: any[] = [idSede, desde, hasta];
@@ -428,6 +469,8 @@ export class AgendaService {
     const horaInicio = String(d.hora_inicio).slice(0, 8);
 
     if (!idTipo) throw new BadRequestException('Debe indicar el tipo de cita');
+    if (!idSede) throw new BadRequestException('La sede es obligatoria para atribuir la empresa');
+    await this.unidad.exigirSede(idSede, d.id_unidad);
 
     const [tipo] = await this.db.query(
       `SELECT * FROM cli_tipo_cita WHERE id_tipo_cita=? AND estado_registro='ACTIVO'`,
@@ -1099,6 +1142,16 @@ export class AgendaService {
     idSede?: number | null,
   ) {
     if (await this.sedePermiteSolape(idSede)) return true;
+    const [eq] = await this.db.query(
+      `SELECT COALESCE(intervalo_minutos_entre, 0) AS intervalo_minutos_entre, estado, nombre
+       FROM cli_equipo WHERE id_equipo=? AND estado_registro='ACTIVO'`,
+      [idEquipo],
+    );
+    if (!eq || String(eq.estado) !== 'OPERATIVO') return false;
+    const gap = Math.max(0, Number(eq.intervalo_minutos_entre || 0));
+    // Ventana ocupada ampliada: no permitir inicio hasta gap minutos después del fin previo (y viceversa).
+    const winStart = startM - gap;
+    const winEnd = endResM + gap;
     const citas = await this.db.query(
       `SELECT hora_inicio, COALESCE(hora_fin_recurso, hora_fin) AS fin FROM cli_cita
        WHERE fecha_cita=? AND id_equipo=? AND estado_registro='ACTIVO'
@@ -1107,7 +1160,7 @@ export class AgendaService {
       [fecha, idEquipo, excludeId || null, excludeId || 0],
     );
     return !citas.some((c: any) =>
-      this.overlaps(startM, endResM, this.toMin(c.hora_inicio), this.toMin(c.fin)),
+      this.overlaps(winStart, winEnd, this.toMin(c.hora_inicio), this.toMin(c.fin)),
     );
   }
 
@@ -1151,6 +1204,7 @@ export class AgendaService {
   async create(d: CreateCitaDto, userId: number) {
     const v = await this.validar(d);
     if (!v.ok) this.throwValidacion(v);
+    const sede = await this.unidad.exigirSede(Number(d.id_sede), (d as any).id_unidad);
 
     const qr = this.db.createQueryRunner();
     await qr.connect();
@@ -1158,11 +1212,12 @@ export class AgendaService {
     try {
       const r = await qr.query(
         `INSERT INTO cli_cita
-          (id_sede,id_tipo_cita,id_paciente,id_personal,id_tratamiento,id_sala,id_equipo,id_paciente_paquete,
+          (id_sede,id_unidad,id_tipo_cita,id_paciente,id_personal,id_tratamiento,id_sala,id_equipo,id_paciente_paquete,
            fecha_cita,hora_inicio,hora_fin,hora_fin_recurso,estado,notas,precio_acordado,id_usuario_crea)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'PENDIENTE',?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'PENDIENTE',?,?,?)`,
         [
           d.id_sede,
+          sede.id_unidad,
           d.id_tipo_cita,
           d.id_paciente,
           v.assignedProf,
@@ -1200,15 +1255,28 @@ export class AgendaService {
 
       await this.syncCitaTratamientos(qr, id, v.ids_tratamiento || [], userId);
 
+      let numeroSesion: number | null = null;
+      if (d.id_hd_paquete) {
+        numeroSesion = await this.ligarPlanTratamiento(
+          qr,
+          id,
+          Number(d.id_hd_paquete),
+          Number(d.id_paciente),
+          sede.id_unidad,
+          userId,
+        );
+      }
+
       await qr.commitTransaction();
       await this.auditoria.registrar('cli_cita', id, 'CREAR', userId, null, d);
       return {
         id,
-        message: 'Cita creada',
+        message: numeroSesion ? `Cita creada · sesión ${numeroSesion}` : 'Cita creada',
         warnings: v.warnings,
         steps: v.steps,
         hora_fin: v.hora_fin,
         duracion_minutos: v.duracion_minutos,
+        numero_sesion: numeroSesion,
       };
     } catch (e) {
       await qr.rollbackTransaction();
@@ -1218,24 +1286,101 @@ export class AgendaService {
     }
   }
 
+  /**
+   * Liga la cita a la siguiente sesión de un plan (cli_hd_paquete) en la misma transacción.
+   * Si no se envía id_hd_paquete, create() no llama aquí.
+   * CANCELADA / NO_ASISTIO / REPROGRAMADA no ocupan número (la sesión vuelve a estar agendable).
+   */
+  private async ligarPlanTratamiento(
+    qr: any,
+    idCita: number,
+    idPaquete: number,
+    idPaciente: number,
+    idUnidad: number,
+    userId: number,
+  ): Promise<number> {
+    const [paquete] = await qr.query(
+      `SELECT p.id_hd_paquete, p.id_historia_digital, p.id_item, p.nombre,
+              p.sesiones_total, p.sesiones_usadas, p.estado_registro
+       FROM cli_hd_paquete p
+       JOIN cli_historia_digital h ON h.id_historia_digital = p.id_historia_digital
+       WHERE p.id_hd_paquete = ? AND h.id_paciente = ? AND h.id_unidad = ?
+         AND p.estado_registro = 'ACTIVO' AND h.estado_registro = 'ACTIVO'
+       FOR UPDATE`,
+      [idPaquete, idPaciente, idUnidad],
+    );
+    if (!paquete) {
+      throw new BadRequestException('El plan de tratamiento no pertenece a este paciente en la empresa activa.');
+    }
+    if (!paquete.id_item) {
+      throw new BadRequestException('El plan no tiene ítem de catálogo para numerar la sesión.');
+    }
+    if (Number(paquete.sesiones_usadas) >= Number(paquete.sesiones_total)) {
+      throw new BadRequestException('Este plan ya no tiene sesiones pendientes.');
+    }
+    const vigentes = await qr.query(
+      `SELECT s.numero_sesion, s.id_cita, c.estado
+       FROM cli_hd_cita_sesion s
+       JOIN cli_cita c ON c.id_cita = s.id_cita AND c.estado_registro = 'ACTIVO'
+       WHERE s.id_hd_paquete = ? AND s.estado_registro = 'ACTIVO'
+         AND c.estado NOT IN ('CANCELADA', 'NO_ASISTIO', 'REPROGRAMADA')`,
+      [paquete.id_hd_paquete],
+    );
+    // Números de citas abiertas son informativos; el hueco libre = usadas + abiertas + 1.
+    const abiertas = (vigentes || []).filter((s: any) =>
+      ['PENDIENTE', 'CONFIRMADA', 'EN_ATENCION'].includes(String(s.estado)),
+    );
+    const siguiente = Number(paquete.sesiones_usadas || 0) + abiertas.length + 1;
+    if (siguiente > Number(paquete.sesiones_total)) {
+      throw new BadRequestException('Ya están programadas todas las sesiones de este plan.');
+    }
+    await qr.query(
+      `INSERT INTO cli_hd_cita_sesion
+        (id_cita, id_historia_digital, id_item, id_hd_paquete, numero_sesion, id_usuario_crea)
+       VALUES (?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE
+         id_item = VALUES(id_item),
+         id_hd_paquete = VALUES(id_hd_paquete),
+         numero_sesion = VALUES(numero_sesion),
+         estado_registro = 'ACTIVO'`,
+      [
+        idCita,
+        paquete.id_historia_digital,
+        paquete.id_item,
+        paquete.id_hd_paquete,
+        siguiente,
+        userId,
+      ],
+    );
+    return siguiente;
+  }
+
+  /**
+   * Reprogramar = editar la misma cli_cita (fecha/hora/recursos).
+   * No crea fila nueva ni marca REPROGRAMADA; cli_hd_cita_sesion sigue en el mismo id_cita.
+   * Ver reprogramar-sesion.ts.
+   */
   async update(id: number, d: UpdateCitaDto, userId: number) {
     const old = await this.get(id);
     if (['FINALIZADA', 'CANCELADA'].includes(old.estado)) {
       throw new BadRequestException('La cita ya está cerrada');
     }
     const merged = { ...old, ...d };
+    const sede = await this.unidad.exigirSede(Number(merged.id_sede), (d as any).id_unidad);
+    this.unidad.exigirCambio(old.id_unidad, sede.id_unidad);
     const v = await this.validar(merged, id);
     if (!v.ok) this.throwValidacion(v);
 
     await this.db.query(
       `UPDATE cli_cita SET
-        id_sede=?, id_tipo_cita=?, id_paciente=?, id_personal=?, id_tratamiento=?,
+        id_sede=?, id_unidad=?, id_tipo_cita=?, id_paciente=?, id_personal=?, id_tratamiento=?,
         id_sala=?, id_equipo=?, id_paciente_paquete=?,
         fecha_cita=?, hora_inicio=?, hora_fin=?, hora_fin_recurso=?,
         notas=?, precio_acordado=?, id_usuario_mod=?
        WHERE id_cita=? AND estado_registro='ACTIVO'`,
       [
         merged.id_sede,
+        sede.id_unidad,
         merged.id_tipo_cita,
         merged.id_paciente,
         v.assignedProf,
@@ -1326,6 +1471,7 @@ export class AgendaService {
        WHERE id_cita=?`,
       [d.motivo, penalidad, userId, id],
     );
+    await this.liberarVinculoSesionHd(id);
 
     // Reofertar lista de espera compatible
     const wait = await this.db.query(
@@ -1382,25 +1528,49 @@ export class AgendaService {
 
   async cambiarEstado(id: number, estado: string, userId: number) {
     const c = await this.get(id);
-    if (estado === 'FINALIZADA') return this.completar(id, userId);
-    if (['CANCELADA', 'FINALIZADA'].includes(c.estado)) {
+    const destino = String(estado || '').toUpperCase();
+    if (destino === 'FINALIZADA') return this.completar(id, userId);
+    if (destino === 'CANCELADA') {
+      return this.cancelar(id, { motivo: 'Cancelación por cambio de estado' } as CancelarCitaDto, userId);
+    }
+    if (['CANCELADA', 'FINALIZADA', 'NO_ASISTIO', 'REPROGRAMADA'].includes(c.estado)) {
       throw new BadRequestException('La cita ya está cerrada');
     }
     const transitions: Record<string, string[]> = {
-      PENDIENTE: ['CONFIRMADA', 'EN_ATENCION'],
-      CONFIRMADA: ['EN_ATENCION', 'PENDIENTE'],
-      EN_ATENCION: [],
+      PENDIENTE: ['CONFIRMADA', 'EN_ATENCION', 'NO_ASISTIO'],
+      CONFIRMADA: ['EN_ATENCION', 'PENDIENTE', 'NO_ASISTIO'],
+      EN_ATENCION: ['NO_ASISTIO'],
     };
     const allowed = transitions[c.estado] || [];
-    if (!allowed.includes(estado)) {
-      throw new BadRequestException(`No se puede pasar de ${c.estado} a ${estado}`);
+    if (!allowed.includes(destino)) {
+      throw new BadRequestException(`No se puede pasar de ${c.estado} a ${destino}`);
     }
     await this.db.query(`UPDATE cli_cita SET estado=?, id_usuario_mod=? WHERE id_cita=?`, [
-      estado,
+      destino,
       userId,
       id,
     ]);
-    return { message: `Estado actualizado a ${estado}`, estado };
+    if (debeLiberarVinculoSesion(destino)) {
+      await this.liberarVinculoSesionHd(id);
+    }
+    return {
+      message:
+        destino === 'NO_ASISTIO'
+          ? 'Marcada como no asistió; la sesión del plan queda libre para reprogramar'
+          : `Estado actualizado a ${destino}`,
+      estado: destino,
+      vinculo_liberado: debeLiberarVinculoSesion(destino),
+    };
+  }
+
+  /** Soft-delete del vínculo HD: la sesión vuelve a poder agendarse en otra cita. */
+  private async liberarVinculoSesionHd(idCita: number) {
+    await this.db.query(
+      `UPDATE cli_hd_cita_sesion
+       SET estado_registro = 'ELIMINADO'
+       WHERE id_cita = ? AND estado_registro = 'ACTIVO'`,
+      [idCita],
+    );
   }
 
   async completar(id: number, userId: number) {
@@ -1452,10 +1622,11 @@ export class AgendaService {
     return { message: 'Cita eliminada' };
   }
 
-  disponibilidad(q: any) {
+  async disponibilidad(q: any) {
     if (!q.fecha || !q.id_sede) {
-      return Promise.reject(new BadRequestException('fecha e id_sede requeridos'));
+      throw new BadRequestException('fecha e id_sede requeridos');
     }
+    await this.unidad.exigirSede(Number(q.id_sede));
     return this.db.query(
       `SELECT p.id_personal, CONCAT(p.nombres,' ',p.apellidos) personal, h.hora_inicio, h.hora_fin
        FROM cli_personal p
@@ -1479,6 +1650,12 @@ export class AgendaService {
       w.push('le.estado=?');
       p.push(q.estado);
     }
+    if (q.id_sede) await this.unidad.exigirSede(Number(q.id_sede));
+    const filtro = this.unidad.sqlPorSede('le.id_sede');
+    if (filtro.sql) {
+      w.push(filtro.sql);
+      p.push(...filtro.params);
+    }
     const [c] = await this.db.query(
       `SELECT COUNT(*) total FROM cli_lista_espera le WHERE ${w.join(' AND ')}`,
       p,
@@ -1497,6 +1674,7 @@ export class AgendaService {
   }
 
   async addEspera(d: ListaEsperaDto, userId: number) {
+    await this.unidad.exigirSede(Number(d.id_sede), (d as any).id_unidad);
     const r = await this.db.query(
       `INSERT INTO cli_lista_espera
         (id_sede,id_paciente,id_tratamiento,id_personal_preferido,fecha_preferida,turno_preferido,prioridad,observaciones,id_usuario_crea)
@@ -1517,23 +1695,30 @@ export class AgendaService {
   }
 
   async paquetes(idPaciente: number) {
+    const filtro = this.unidad.sqlEmpresa('pp.id_unidad', 'pp.id_sede');
+    const extra = filtro.sql ? ` AND ${filtro.sql}` : '';
     return this.db.query(
       `SELECT pp.*, p.nombre paquete FROM cli_paciente_paquete pp
        JOIN cli_paquete p ON p.id_paquete=pp.id_paquete
-       WHERE pp.id_paciente=? AND pp.estado_registro='ACTIVO'`,
-      [idPaciente],
+       WHERE pp.id_paciente=? AND pp.estado_registro='ACTIVO'${extra}`,
+      [idPaciente, ...filtro.params],
     );
   }
 
   async addPaquete(d: PacientePaqueteDto, userId: number) {
+    if (!d.id_sede) {
+      throw new BadRequestException('El paquete contratado requiere una sede para atribuir la empresa');
+    }
+    const sede = await this.unidad.exigirSede(Number(d.id_sede), (d as any).id_unidad);
     const r = await this.db.query(
       `INSERT INTO cli_paciente_paquete
-        (id_paciente,id_paquete,id_sede,fecha_compra,fecha_vencimiento,sesiones_total,precio_pagado,observaciones,id_usuario_crea)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
+        (id_paciente,id_paquete,id_sede,id_unidad,fecha_compra,fecha_vencimiento,sesiones_total,precio_pagado,observaciones,id_usuario_crea)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
       [
         d.id_paciente,
         d.id_paquete,
-        d.id_sede || null,
+        d.id_sede,
+        sede.id_unidad,
         d.fecha_compra,
         d.fecha_vencimiento || null,
         d.sesiones_total,
@@ -1564,7 +1749,18 @@ export class AgendaService {
     );
   }
 
+  private async exigirPersonalAgenda(idPersonal: number) {
+    const [p] = await this.db.query(
+      `SELECT id_personal, id_sede_principal FROM cli_personal
+       WHERE id_personal=? AND estado_registro='ACTIVO'`,
+      [idPersonal],
+    );
+    if (!p) throw new NotFoundException('Personal no encontrado');
+    await this.unidad.exigirPersonal(Number(p.id_personal), p.id_sede_principal ?? null);
+  }
+
   async rolesDePersonal(idPersonal: number) {
+    await this.exigirPersonalAgenda(idPersonal);
     return this.db.query(
       `SELECT pr.id_personal_rol, pr.id_rol_recurso, rr.codigo, rr.nombre,
               pr.vigente_desde, pr.vigente_hasta
@@ -1576,6 +1772,7 @@ export class AgendaService {
   }
 
   async asignarRol(idPersonal: number, idRol: number, userId: number) {
+    await this.exigirPersonalAgenda(idPersonal);
     const [exists] = await this.db.query(
       `SELECT id_personal_rol FROM cli_personal_rol
        WHERE id_personal=? AND id_rol_recurso=? AND estado_registro='ACTIVO'`,
@@ -1590,6 +1787,13 @@ export class AgendaService {
   }
 
   async quitarRol(idPersonalRol: number, userId: number) {
+    const [rol] = await this.db.query(
+      `SELECT id_personal FROM cli_personal_rol
+       WHERE id_personal_rol=? AND estado_registro='ACTIVO'`,
+      [idPersonalRol],
+    );
+    if (!rol) throw new NotFoundException('Rol no encontrado');
+    await this.exigirPersonalAgenda(Number(rol.id_personal));
     await this.db.query(
       `UPDATE cli_personal_rol SET estado_registro='ELIMINADO', id_usuario_mod=? WHERE id_personal_rol=?`,
       [userId, idPersonalRol],

@@ -10,9 +10,9 @@ export class SeguridadController {
 
   @Get('permisos')
   async misPermisos(@Req() req: any) {
-    const user = req.user;
-    if (!user || !user.roleId) throw new UnauthorizedException('Token inválido o sin rol');
-    const permisos = await this.seguridadService.getPermisosPorRol(user.roleId);
+    const unidad = req.unidad;
+    if (!unidad?.roleId) throw new UnauthorizedException('Token inválido o sin empresa activa');
+    const permisos = await this.seguridadService.getPermisosPorRol(unidad.roleId);
     return { success: true, data: { permisos: permisos } };
   }
 

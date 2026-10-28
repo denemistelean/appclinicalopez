@@ -11,9 +11,8 @@ import { CommonModule } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, FormsModule, Validators } from '@angular/forms';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subject, debounceTime, distinctUntilChanged, filter, switchMap, catchError, of } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, filter, switchMap, catchError, of, firstValueFrom } from 'rxjs';
 
-import { FormErrorComponent } from 'src/app/shared/components/form-error/form-error.component';
 import { PermissionsService } from 'src/app/core/services/seguridad/permissions.service';
 import { AlertService } from 'src/app/core/services/ui/alert.service';
 import { SedeContextService } from 'src/app/core/services/sede-context.service';
@@ -32,7 +31,6 @@ import { MapaCorporalService } from '../mapa-corporal/mapa-corporal.service';
     CommonModule,
     ReactiveFormsModule,
     FormsModule,
-    FormErrorComponent,
     NgSelectModule,
     MapaCorporalComponent,
   ],
@@ -249,7 +247,32 @@ export class HistoriaClinicaComponent implements OnInit {
     const idPersonal = Number(q.get('id_personal') || 0);
     const fecha = q.get('fecha') || '';
     if (!idCita && !idConsulta) return;
+    if (idCita) {
+      this.agenda.findOne(idCita).subscribe({
+        next: (res: any) => {
+          const cita = res?.data?.id_cita ? res.data : (res?.data?.data || res?.data || res);
+          if (String(cita?.estado || '').toUpperCase() === 'FINALIZADA') {
+            this.alert.warning('Esta cita ya está finalizada.');
+            this.router.navigateByUrl('/agenda');
+            return;
+          }
+          this.precargarAtencion(idCita, idConsulta, idPaciente, idSede, idPersonal, fecha);
+        },
+        error: () => this.precargarAtencion(idCita, idConsulta, idPaciente, idSede, idPersonal, fecha),
+      });
+      return;
+    }
+    this.precargarAtencion(idCita, idConsulta, idPaciente, idSede, idPersonal, fecha);
+  }
 
+  private precargarAtencion(
+    idCita: number,
+    idConsulta: number,
+    idPaciente: number,
+    idSede: number,
+    idPersonal: number,
+    fecha: string,
+  ) {
     if (this.consultaCerrada()) this.form.enable();
     this.consultaCerrada.set(false);
     this.citaVinculo.set(idCita || null);
@@ -287,6 +310,11 @@ export class HistoriaClinicaComponent implements OnInit {
     this.idConsulta.set(Number(c.id_consulta));
     if (c.id_cita) this.citaVinculo.set(Number(c.id_cita));
     const cerrada = c.estado === 'FINALIZADA' || c.estado === 'ANULADA';
+    if (cerrada) {
+      this.alert.warning('Esta cita ya está finalizada.');
+      this.router.navigateByUrl('/agenda');
+      return;
+    }
     this.consultaCerrada.set(cerrada);
     const ex = c.examen_json || {};
     const fecha = String(c.fecha_consulta || '').replace(' ', 'T').slice(0, 16);
@@ -472,9 +500,33 @@ export class HistoriaClinicaComponent implements OnInit {
     this.medicamentosFA.removeAt(idx);
   }
 
-  onMedSelect(item: any) {
-    if (!item) return;
+  crearMedicamentoTag = async (nombre: string) => {
+    const n = String(nombre || '').trim().toUpperCase();
+    if (n.length < 2) return null;
+    try {
+      const res: any = await firstValueFrom(this.service.crearMedicamento(n));
+      const body = res?.data?.id_medicamento != null ? res.data : (res?.data?.data || res?.data || res);
+      const item = {
+        id_medicamento: Number(body?.id_medicamento) || null,
+        nombre: body?.nombre || n,
+        concentracion: body?.concentracion || null,
+        forma: body?.forma || null,
+      };
+      this.medOptions.update((list) =>
+        list.some((x) => Number(x.id_medicamento) === Number(item.id_medicamento) && item.id_medicamento)
+          ? list
+          : [item, ...list],
+      );
+      return item;
+    } catch {
+      return { id_medicamento: null, nombre: n, concentracion: null, forma: null };
+    }
+  };
+
+  onMedSelect(item: any, select?: { clearModel: () => void }) {
+    if (!item?.nombre && !item?.medicamento) return;
     this.agregarMedicamento(item);
+    queueMicrotask(() => select?.clearModel());
   }
 
   resumenExamen(): string {

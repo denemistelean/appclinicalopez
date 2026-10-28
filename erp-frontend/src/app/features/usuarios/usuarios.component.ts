@@ -11,6 +11,7 @@ import { PermissionsService } from 'src/app/core/services/seguridad/permissions.
 import { AlertService } from 'src/app/core/services/ui/alert.service';
 import { UsuariosService } from './usuarios.service';
 import { PermisosService as SeguridadService } from '../permisos/permisos.service';
+import { PersonalService } from '../personal/personal.service';
 
 @Component({
   selector: 'app-usuarios',
@@ -23,6 +24,7 @@ export class UsuariosComponent implements OnInit {
   private fb               = inject(FormBuilder);
   private service          = inject(UsuariosService);
   private seguridadService = inject(SeguridadService);
+  private personalService  = inject(PersonalService);
   private alert            = inject(AlertService);
   public  perms            = inject(PermissionsService);
 
@@ -30,6 +32,7 @@ export class UsuariosComponent implements OnInit {
 
   form: FormGroup;
   roles = signal<any[]>([]);
+  personal = signal<any[]>([]);
 
   constructor() {
     this.form = this.fb.group({
@@ -38,12 +41,24 @@ export class UsuariosComponent implements OnInit {
       correo:    ['', [Validators.required, Validators.email]],
       password:  ['', [Validators.required, Validators.minLength(6)]],
       id_rol:    [null, Validators.required],
+      id_personal: [null],
     });
   }
 
   ngOnInit() {
     this.seguridadService.getRoles().subscribe({
       next: (res: any) => this.roles.set(res.data?.data || res.data || []),
+    });
+    this.personalService.findAll(1, 200, '').subscribe({
+      next: (res: any) => {
+        const list = res?.data?.data || res?.data || res || [];
+        this.personal.set(
+          (Array.isArray(list) ? list : []).map((p: any) => ({
+            ...p,
+            label: `${p.apellidos || ''}, ${p.nombres || ''}`.trim(),
+          })),
+        );
+      },
     });
   }
 
@@ -66,6 +81,7 @@ export class UsuariosComponent implements OnInit {
             apellidos: data.apellidos,
             correo:    data.correo,
             id_rol:    data.id_rol,
+            id_personal: data.id_personal ?? null,
           });
 
           this.form.get('password')?.clearValidators();

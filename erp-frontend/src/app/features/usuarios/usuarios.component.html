@@ -96,6 +96,15 @@
                 <app-form-error [control]="form.get('id_rol')"></app-form-error>
             </div>
 
+            <div class="col-md-6">
+                <label class="form-label">Personal / cosmiatra (opcional)</label>
+                <ng-select class="ng-select-sm" [items]="personal()" bindLabel="label" bindValue="id_personal"
+                           formControlName="id_personal" placeholder="Vincular agenda propia..." appendTo="body"
+                           [searchable]="true" [clearable]="true" notFoundText="Sin resultados">
+                </ng-select>
+                <div class="form-text">Si se vincula, solo verá su propia agenda.</div>
+            </div>
+
             @if (!crud.editingId()) {
                 <div class="col-md-6">
                     <label class="form-label">Contraseña <span class="req-star">*</span></label>

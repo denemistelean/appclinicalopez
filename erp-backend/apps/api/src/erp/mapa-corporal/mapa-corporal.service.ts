@@ -4,8 +4,12 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { createReadStream, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
+import { resolverDocumentosRoot } from '../../core/archivos/documentos-root';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
+import { UnidadScopeService } from '@app/auth';
 import { MapaMarcadorDto, UpdateMapaMarcadorDto } from './mapa-corporal.dto';
+
+type CapturaRef = { id_cita?: number | null; id_consulta?: number | null };
 
 @Injectable()
 export class MapaCorporalService {
@@ -13,6 +17,7 @@ export class MapaCorporalService {
     @InjectDataSource('APP_DB_CONN') private readonly db: DataSource,
     private readonly auditoria: AuditoriaService,
     private readonly config: ConfigService,
+    private readonly unidad: UnidadScopeService,
   ) {}
 
   private meta(page: number, limit: number, total: number) {
@@ -20,34 +25,41 @@ export class MapaCorporalService {
   }
 
   private rootDocs(): string {
-    return (
-      this.config.get<string>('DOCUMENTOS_ROOT') ||
-      join('D:', 'xampp', 'htdocs', 'appClinicaLopez', 'storage', 'ClinicaDigital')
-    );
+    return resolverDocumentosRoot({
+      configurada: this.config.get<string>('DOCUMENTOS_ROOT'),
+      respaldo: join('D:', 'xampp', 'htdocs', 'appClinicaLopez', 'storage', 'ClinicaDigital'),
+    });
   }
 
   private padPac(id: number) {
     return String(id).padStart(9, '0');
   }
 
-  private capturaDir(idPaciente: number) {
-    return join(this.rootDocs(), 'PACIENTES', this.padPac(idPaciente), 'MAPA');
+  private capturaDir(idPaciente: number, idUnidad: number, idUnidadRegistro: number | null) {
+    const base = join(this.rootDocs(), 'PACIENTES', this.padPac(idPaciente), 'MAPA');
+    if (idUnidadRegistro != null && idUnidad === idUnidadRegistro) return base;
+    return join(base, `unidad-${idUnidad}`);
   }
 
-  private capturaPath(idPaciente: number, vista: 'frontal' | 'posterior') {
-    return join(this.capturaDir(idPaciente), `vista_${vista}.png`);
+  private capturaPath(
+    idPaciente: number,
+    vista: 'frontal' | 'posterior',
+    idUnidad: number,
+    idUnidadRegistro: number | null,
+  ) {
+    return join(this.capturaDir(idPaciente, idUnidad, idUnidadRegistro), `vista_${vista}.png`);
   }
 
-  async estadoCapturas(idPaciente: number) {
-    await this.assertPaciente(idPaciente);
-    const frontal = existsSync(this.capturaPath(idPaciente, 'frontal'));
-    const posterior = existsSync(this.capturaPath(idPaciente, 'posterior'));
+  async estadoCapturas(idPaciente: number, ref?: CapturaRef) {
+    const acceso = await this.accesoCaptura(idPaciente, ref);
+    const frontal = existsSync(this.capturaPath(idPaciente, 'frontal', acceso.idUnidad, acceso.idUnidadRegistro));
+    const posterior = existsSync(this.capturaPath(idPaciente, 'posterior', acceso.idUnidad, acceso.idUnidadRegistro));
     return { frontal, posterior, actualizado: frontal || posterior };
   }
 
-  async getCaptura(idPaciente: number, vista: 'frontal' | 'posterior') {
-    await this.assertPaciente(idPaciente);
-    const path = this.capturaPath(idPaciente, vista);
+  async getCaptura(idPaciente: number, vista: 'frontal' | 'posterior', ref?: CapturaRef) {
+    const acceso = await this.accesoCaptura(idPaciente, ref);
+    const path = this.capturaPath(idPaciente, vista, acceso.idUnidad, acceso.idUnidadRegistro);
     if (!existsSync(path)) throw new NotFoundException(`Captura ${vista} no encontrada`);
     return new StreamableFile(createReadStream(path), {
       type: 'image/png',
@@ -58,14 +70,14 @@ export class MapaCorporalService {
   /** Guarda PNG base64 (data URL o puro) de ambas vistas. */
   async guardarCapturas(
     idPaciente: number,
-    body: { frontal?: string; posterior?: string },
+    body: { frontal?: string; posterior?: string; id_cita?: number | null; id_consulta?: number | null },
     userId: number,
   ) {
-    await this.assertPaciente(idPaciente);
+    const acceso = await this.accesoCaptura(idPaciente, body);
     if (!body?.frontal && !body?.posterior) {
       throw new BadRequestException('Envíe al menos una captura (frontal o posterior)');
     }
-    const dir = this.capturaDir(idPaciente);
+    const dir = this.capturaDir(idPaciente, acceso.idUnidad, acceso.idUnidadRegistro);
     mkdirSync(dir, { recursive: true });
 
     const saved: string[] = [];
@@ -73,7 +85,7 @@ export class MapaCorporalService {
       const raw = body[vista];
       if (!raw) continue;
       const buf = this.decodeDataUrlPng(raw);
-      writeFileSync(this.capturaPath(idPaciente, vista), buf);
+      writeFileSync(this.capturaPath(idPaciente, vista, acceso.idUnidad, acceso.idUnidadRegistro), buf);
       saved.push(vista);
     }
 
@@ -83,10 +95,10 @@ export class MapaCorporalService {
     return { message: 'Capturas guardadas', vistas: saved };
   }
 
-  async eliminarCapturas(idPaciente: number, userId: number) {
-    await this.assertPaciente(idPaciente);
+  async eliminarCapturas(idPaciente: number, userId: number, ref?: CapturaRef) {
+    const acceso = await this.accesoCaptura(idPaciente, ref);
     for (const vista of ['frontal', 'posterior'] as const) {
-      const p = this.capturaPath(idPaciente, vista);
+      const p = this.capturaPath(idPaciente, vista, acceso.idUnidad, acceso.idUnidadRegistro);
       if (existsSync(p)) unlinkSync(p);
     }
     await this.auditoria.registrar('cli_mapa_captura', idPaciente, 'ELIMINAR', userId, null, null);
@@ -103,12 +115,61 @@ export class MapaCorporalService {
     return buf;
   }
 
-  private async assertPaciente(id: number) {
+  /**
+   * La captura de la empresa de registro sigue en MAPA/.
+   * Si el paciente fue registrado en la otra empresa pero tiene cita o consulta
+   * en la empresa activa, la captura se autoriza y se guarda aparte.
+   */
+  private async accesoCaptura(idPaciente: number, ref?: CapturaRef) {
     const [pac] = await this.db.query(
-      `SELECT id_paciente FROM cli_paciente WHERE id_paciente=? AND estado_registro='ACTIVO'`,
-      [id],
+      `SELECT id_paciente, id_unidad_registro
+       FROM cli_paciente WHERE id_paciente=? AND estado_registro='ACTIVO'`,
+      [idPaciente],
     );
     if (!pac) throw new NotFoundException('Paciente no encontrado');
+    const idCita = Number(ref?.id_cita) || 0;
+    const idConsulta = Number(ref?.id_consulta) || 0;
+    if (idCita) {
+      const [cita] = await this.db.query(
+        `SELECT id_paciente FROM cli_cita WHERE id_cita=? AND estado_registro='ACTIVO'`,
+        [idCita],
+      );
+      if (!cita || Number(cita.id_paciente) !== Number(idPaciente)) {
+        throw new BadRequestException('La cita no corresponde al paciente');
+      }
+    }
+    if (idConsulta) {
+      const [consulta] = await this.db.query(
+        `SELECT id_paciente FROM cli_consulta WHERE id_consulta=? AND estado_registro='ACTIVO'`,
+        [idConsulta],
+      );
+      if (!consulta || Number(consulta.id_paciente) !== Number(idPaciente)) {
+        throw new BadRequestException('La consulta no corresponde al paciente');
+      }
+    }
+    const activa = this.unidad.exigirEmpresa();
+    const registro = pac.id_unidad_registro == null ? null : Number(pac.id_unidad_registro);
+    if (idCita || idConsulta) {
+      await this.unidad.exigirOrigen(
+        { id_paciente: idPaciente, id_cita: idCita || null, id_consulta: idConsulta || null },
+        { sede: false, suelto: 'registro' },
+      );
+    } else if (registro !== activa) {
+      const [cita] = await this.db.query(
+        `SELECT id_cita FROM cli_cita
+         WHERE id_paciente=? AND id_unidad=? AND estado_registro='ACTIVO' LIMIT 1`,
+        [idPaciente, activa],
+      );
+      const [consulta] = cita
+        ? [null]
+        : await this.db.query(
+            `SELECT id_consulta FROM cli_consulta
+             WHERE id_paciente=? AND id_unidad=? AND estado_registro='ACTIVO' LIMIT 1`,
+            [idPaciente, activa],
+          );
+      if (!cita && !consulta) await this.unidad.exigirHistoriaPaciente(idPaciente);
+    }
+    return { idUnidad: activa, idUnidadRegistro: registro };
   }
 
   async list(q: any) {
@@ -132,6 +193,16 @@ export class MapaCorporalService {
       const s = `%${String(q.search).trim()}%`;
       w.push(`(m.zona_label LIKE ? OR m.procedimiento LIKE ? OR CONCAT(pa.nombres,' ',pa.apellidos) LIKE ?)`);
       p.push(s, s, s);
+    }
+    const origen = this.unidad.sqlOrigen('m', {
+      consulta: true,
+      cita: true,
+      sede: false,
+      suelto: 'registro',
+    });
+    if (origen.sql) {
+      w.push(origen.sql);
+      p.push(...origen.params);
     }
     const where = w.join(' AND ');
     const [c] = await this.db.query(
@@ -164,6 +235,7 @@ export class MapaCorporalService {
       [id],
     );
     if (!row) throw new NotFoundException('Marcador no encontrado');
+    await this.unidad.exigirOrigen(row, { sede: false, suelto: 'registro' });
     return row;
   }
 
@@ -173,6 +245,14 @@ export class MapaCorporalService {
       [d.id_paciente],
     );
     if (!pac) throw new BadRequestException('Paciente no válido');
+    await this.unidad.exigirOrigen(
+      {
+        id_paciente: d.id_paciente,
+        id_consulta: d.id_consulta || null,
+        id_cita: d.id_cita || null,
+      },
+      { sede: false, suelto: 'registro' },
+    );
     const r = await this.db.query(
       `INSERT INTO cli_mapa_marcador
         (id_paciente,id_consulta,id_cita,zona_codigo,zona_label,lado,procedimiento,estado,
@@ -206,6 +286,14 @@ export class MapaCorporalService {
 
   async update(id: number, d: UpdateMapaMarcadorDto, userId: number) {
     const old = await this.findOne(id);
+    await this.unidad.exigirOrigen(
+      {
+        id_paciente: old.id_paciente,
+        id_consulta: d.id_consulta ?? old.id_consulta,
+        id_cita: d.id_cita ?? old.id_cita,
+      },
+      { sede: false, suelto: 'registro' },
+    );
     await this.db.query(
       `UPDATE cli_mapa_marcador SET
          id_consulta=COALESCE(?,id_consulta),

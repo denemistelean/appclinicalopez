@@ -97,14 +97,14 @@
 
 .rp-table th {
   text-align: left;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #6b756e;
+  letter-spacing: 0.04em;
+  color: #fff;
   font-weight: 700;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #eef1ee;
-  background: #fafbfa;
+  padding: 0.9rem 1rem;
+  border: 0;
+  background: #10243f;
   white-space: nowrap;
 }
 
@@ -139,6 +139,20 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.01em;
+}
+
+.rp-name-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rp-name-link:hover {
+  color: var(--erp-primary);
+  text-decoration: underline;
 }
 
 .rp-doc-tipo {
@@ -203,4 +217,79 @@
 
 .rp-pager button:disabled {
   opacity: 0.45;
+}
+
+.rp-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.rp-tabs button {
+  border: 1px solid #e1e6e2;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  color: #4a554e;
+}
+
+.rp-tabs button.active {
+  background: #0d9488;
+  border-color: #0d9488;
+  color: #fff;
+}
+
+.rp-sorela-bar {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.rp-sorela-tipos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.rp-chip {
+  border: 1px solid #e1e6e2;
+  background: #f7faf8;
+  border-radius: 8px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.75rem;
+  color: #3d4640;
+}
+
+.rp-chip.on {
+  background: #ccfbf1;
+  border-color: #5eead4;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.rp-sorela-fechas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+  font-size: 0.8rem;
+}
+
+.rp-sorela-fechas input {
+  border: 1px solid #e1e6e2;
+  border-radius: 8px;
+  padding: 0.2rem 0.4rem;
+  margin-left: 0.25rem;
+}
+
+.rp-h3 {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.4rem;
+  color: #2f3832;
+}
+
+.rp-nota {
+  margin-bottom: 0.5rem;
 }

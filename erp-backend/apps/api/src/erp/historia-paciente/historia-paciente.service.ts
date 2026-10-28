@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { AuditoriaService } from '@app/common';
+import { UnidadScopeService } from '@app/auth';
 import { DataSource } from 'typeorm';
 
 type RecursoCfg = {
@@ -185,6 +186,7 @@ export class HistoriaPacienteService {
   constructor(
     @InjectDataSource('APP_DB_CONN') private readonly db: DataSource,
     private readonly auditoria: AuditoriaService,
+    private readonly unidad: UnidadScopeService,
   ) {}
 
   private cfg(recurso: string) {
@@ -199,6 +201,7 @@ export class HistoriaPacienteService {
       [id],
     );
     if (!r) throw new NotFoundException('Paciente no encontrado');
+    await this.unidad.exigirHistoriaPaciente(id);
   }
 
   private calcImc(peso: any, tallaCm: any): number | null {
@@ -292,6 +295,7 @@ export class HistoriaPacienteService {
   }
 
   async remove(idPaciente: number, recurso: string, id: number, userId: number) {
+    await this.paciente(idPaciente);
     const c = this.cfg(recurso);
     const r = await this.db.query(
       `UPDATE ${c.table} SET estado_registro='ELIMINADO',id_usuario_mod=?

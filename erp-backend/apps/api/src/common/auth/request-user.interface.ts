@@ -4,6 +4,9 @@
  *
  * Origen JWT (JwtStrategy.validate):
  *   { userId: payload.sub, email: payload.username, roleId: payload.roleId }
+ *
+ * `roleId` es el rol global legado de sis_usuario. No autoriza una empresa.
+ * El rol empresarial sale de cli_usuario_unidad en PermissionsGuard.
  */
 export interface RequestUser {
   idUsuario: number;
@@ -18,5 +21,7 @@ export interface JwtRequestUser {
   userId: number;
   email: string;
   roleId: number;
+  /** Sesión de cli_sesion. Ausente en access tokens emitidos antes de la Fase 2E-2. */
+  sid?: string | null;
   idSucursal?: number;
 }

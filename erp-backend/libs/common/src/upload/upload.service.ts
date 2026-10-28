@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { extname, join } from 'path';
+import { resolverUploadsRoot } from '../uploads-root';
 
 const ALLOWED_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const ALLOWED_DOC_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.pdf', '.xml']);
@@ -9,7 +10,9 @@ const MAX_DOC_BYTES = 10 * 1024 * 1024;
 
 @Injectable()
 export class UploadService {
-  private readonly uploadsRoot = join(process.cwd(), 'uploads');
+  private raizUploads(): string {
+    return resolverUploadsRoot(__dirname);
+  }
 
   saveImage(subdir: string, file: Express.Multer.File, namePrefix: string): string {
     if (!file?.buffer?.length) {
@@ -43,7 +46,7 @@ export class UploadService {
   }
 
   private writeFile(subdir: string, file: Express.Multer.File, namePrefix: string, ext: string): string {
-    const dir = join(this.uploadsRoot, subdir);
+    const dir = join(this.raizUploads(), subdir);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
@@ -58,7 +61,7 @@ export class UploadService {
   deleteIfExists(relativePath: string | null | undefined): void {
     if (!relativePath?.trim()) return;
     const rel = relativePath.replace(/^uploads[\\/]/, '').replace(/^\/+/, '');
-    const full = join(this.uploadsRoot, rel);
+    const full = join(this.raizUploads(), rel);
     if (existsSync(full)) {
       unlinkSync(full);
     }

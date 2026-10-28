@@ -360,10 +360,14 @@
       </div>
       <div class="col-12">
         <label class="form-label">Paciente <span class="req-star">*</span></label>
-        <ng-select class="ng-select-sm" [items]="pacientes()" bindLabel="nombres" bindValue="id_paciente"
-                   formControlName="id_paciente" [searchable]="true" appendTo="body">
-          <ng-template ng-label-tmp let-item="item">{{ labelPaciente(item) }}</ng-template>
-          <ng-template ng-option-tmp let-item="item">{{ labelPaciente(item) }}</ng-template>
+        <ng-select class="ng-select-sm" [items]="pacientes()" bindLabel="label" bindValue="id_paciente"
+                   formControlName="id_paciente" [searchable]="true" appendTo="body"
+                   [searchFn]="filtrarPaciente"
+                   [typeahead]="pacTypeahead$" [minTermLength]="2" [loading]="pacientesLoading()"
+                   placeholder="Buscar por DNI, nombre o apellido..."
+                   notFoundText="Escriba al menos 2 caracteres">
+          <ng-template ng-label-tmp let-item="item">{{ item.label || labelPaciente(item) }}</ng-template>
+          <ng-template ng-option-tmp let-item="item">{{ item.label || labelPaciente(item) }}</ng-template>
         </ng-select>
         <app-form-error [control]="form.get('id_paciente')"></app-form-error>
       </div>
@@ -466,6 +470,47 @@
       </div>
     }
 
+    @if (planesPendientes().length) {
+      <div class="mt-3 alert alert-info py-2 px-3 mb-0">
+        <div class="fw-semibold small mb-1">Planes de tratamiento con sesiones por programar</div>
+        <p class="small text-muted mb-2 mb-md-2">
+          Opcional: puede ligar o no esta cita a la siguiente sesión del plan. Solo cuenta lo elegido al
+          <strong>guardar</strong>; puede cambiarlo libremente antes. Nunca bloquea el guardado.
+          “Sugerida desde” = última sesión + intervalo del catálogo (solo orientación).
+        </p>
+        @for (p of planesPendientes(); track p.id_hd_paquete) {
+          <div class="d-flex flex-wrap align-items-center gap-2 small mb-2 border-bottom border-opacity-25 pb-2">
+            <div class="flex-grow-1">
+              <strong>{{ p.nombre }}</strong>
+              · Sesión {{ p.numero_siguiente_sesion }} de {{ p.sesiones_total }}
+              @if (p.fecha_sugerida_desde) {
+                · sugerida desde {{ p.fecha_sugerida_desde }}
+              }
+              @if (p.id_cita_siguiente) {
+                · ya tiene cita vigente (#{{ p.id_cita_siguiente }})
+              }
+              @if (planAceptadoId() === p.id_hd_paquete) {
+                <span class="text-success d-block">
+                  Ligada a la sesión {{ p.numero_siguiente_sesion }} de {{ p.sesiones_total }}
+                </span>
+              }
+            </div>
+            @if (planAceptadoId() === p.id_hd_paquete) {
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="quitarVinculoPlan()">Quitar vínculo</button>
+            } @else {
+              <button type="button" class="btn btn-sm btn-primary"
+                      (click)="ligarPlanPendiente(p)">Ligar a esta sesión</button>
+              @if (!planAceptadoId()) {
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="quitarVinculoPlan()">No ligar</button>
+              }
+            }
+          </div>
+        }
+      </div>
+    }
+
     @if (validacion(); as v) {
       <div class="check-list mt-3">
         @for (s of v.steps || []; track $index) {
@@ -485,7 +530,13 @@
     @if (sugerencia()) {
       <div class="suggestion-box mt-2">
         Próximo horario libre hoy: <b>{{ sugerencia() }}</b>
-        <button type="button" class="btn btn-sm btn-primary ms-2" (click)="usarSugerencia()">Reservar</button>
+        @if (sugerenciaAceptada()) {
+          <span class="text-success small ms-2">Horario aplicado.</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary ms-2" (click)="cancelarSugerencia()">Cancelar</button>
+        } @else {
+          <button type="button" class="btn btn-sm btn-primary ms-2" (click)="aceptarSugerencia()">Aceptar</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary ms-2" (click)="cancelarSugerencia()">Cancelar</button>
+        }
       </div>
     } @else if (validacion() && !(validacion().ok || validacion().valida)) {
       <button type="button" class="btn btn-sm btn-outline-secondary mt-2 w-100" (click)="agregarEspera()">
@@ -513,6 +564,12 @@
           <button type="button" class="cd-icon-btn" title="Editar cita"
                   (click)="editarCitaDesdeDetalle(modal, modalCita)">
             <i class="bi bi-pencil"></i>
+          </button>
+        }
+        @if (perms.hasPermission('actualizar_cita') && puedeMarcarNoAsistio(c)) {
+          <button type="button" class="cd-icon-btn" title="No asistió"
+                  (click)="cambiarEstadoCita(modal, 'NO_ASISTIO')">
+            <i class="bi bi-person-x"></i>
           </button>
         }
         @if (perms.hasPermission('actualizar_cita') && puedeCancelar(c)) {
@@ -593,10 +650,14 @@
         </div>
       </div>
 
-      @if (perms.hasPermission('ver_historia_clinica') && c.estado !== 'CANCELADA') {
+      @if ((esSorela() ? perms.hasPermission('ver_paciente') : perms.hasPermission('ver_historia_clinica'))
+          && c.estado !== 'CANCELADA' && c.estado !== 'FINALIZADA' && c.estado !== 'NO_ASISTIO' && c.estado !== 'REPROGRAMADA') {
         <button type="button" class="btn btn-primary w-100 cd-atender" (click)="atenderCita(modal)">
           Atender
         </button>
+      }
+      @if (c.estado === 'NO_ASISTIO') {
+        <p class="hd-note text-center mb-0 mt-2">No asistió. Puede crear una nueva cita y ligarla de nuevo al plan.</p>
       }
     </div>
   }

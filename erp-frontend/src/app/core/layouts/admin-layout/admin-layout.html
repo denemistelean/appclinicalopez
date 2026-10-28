@@ -10,7 +10,7 @@
 
   <div class="layout-main-content flex-grow-1 d-flex flex-column h-100">
 
-    <nav class="app-navbar navbar px-4 py-3 d-flex justify-content-between flex-shrink-0">
+    <nav class="app-navbar navbar px-4 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2 flex-shrink-0">
       <div class="d-flex align-items-center gap-3">
         <button class="btn btn-soft-neutral btn-icon"
                 (click)="layoutService.toggleSidebar()">
@@ -18,25 +18,50 @@
         </button>
 
         <h5 class="m-0 fw-bold unselectable text-main navbar-title">
-          Sistema de Gestión
+          Clínica Estética López
         </h5>
       </div>
 
       <div class="d-flex gap-3 align-items-center">
-        <div class="sede-selector" style="min-width: 200px;">
-          <ng-select
-            class="ng-select-sm"
-            [items]="sedesOptions()"
-            bindLabel="nombre"
-            bindValue="id_sede"
-            [clearable]="false"
-            [searchable]="true"
-            appendTo="body"
-            [ngModel]="sedeCtx.idSedeActiva()"
-            (ngModelChange)="onSedeChange($event)"
-            placeholder="Sede activa"
-            notFoundText="Sin sedes">
-          </ng-select>
+        <div class="conexion-bar">
+          <div class="conexion-campo">
+            <span>Empresa</span>
+            <ng-select
+              class="ng-select-sm"
+              [items]="unidadCtx.membresias()"
+              bindLabel="nombre"
+              bindValue="id_unidad"
+              [clearable]="false"
+              [searchable]="true"
+              appendTo="body"
+              [ngModel]="borradorUnidad()"
+              (ngModelChange)="elegirEmpresa($event)"
+              placeholder="Empresa"
+              notFoundText="Sin empresas">
+            </ng-select>
+          </div>
+          <div class="conexion-campo">
+            <span>Sede</span>
+            <ng-select
+              class="ng-select-sm"
+              [items]="sedesOptions()"
+              bindLabel="nombre"
+              bindValue="id_sede"
+              [clearable]="false"
+              [searchable]="true"
+              appendTo="body"
+              [ngModel]="borradorSede()"
+              (ngModelChange)="borradorSede.set($event)"
+              placeholder="Sede"
+              notFoundText="Sin sedes">
+            </ng-select>
+          </div>
+          @if (conexionDistinta()) {
+            <button type="button" class="btn btn-primary btn-sm conexion-btn"
+                    (click)="conectar()" [disabled]="conectando() || !borradorUnidad() || !sedesListas()">
+              Conectar
+            </button>
+          }
         </div>
         <div ngbDropdown container="body" placement="bottom-end">
           <button type="button" class="btn btn-soft-neutral btn-sm d-flex align-items-center gap-2" ngbDropdownToggle>

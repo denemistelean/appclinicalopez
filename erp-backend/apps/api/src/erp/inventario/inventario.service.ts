@@ -1,13 +1,24 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { AuditoriaService } from '@app/common';
+import { UnidadScopeService } from '@app/auth';
 import { DataSource, QueryRunner } from 'typeorm';
 import { CreateInsumoDto, CreateLoteDto, CreateProveedorDto, MovimientoDto, TransferenciaDto, UpdateInsumoDto, UpdateLoteDto, UpdateProveedorDto } from './inventario.dto';
 
 @Injectable()
 export class InventarioService {
-  constructor(@InjectDataSource('APP_DB_CONN') private readonly db: DataSource, private readonly auditoria: AuditoriaService) {}
+  constructor(
+    @InjectDataSource('APP_DB_CONN') private readonly db: DataSource,
+    private readonly auditoria: AuditoriaService,
+    private readonly unidad: UnidadScopeService,
+  ) {}
+
+  private porSede(colSede: string, extra: string, params: any[]) {
+    const filtro = this.unidad.sqlPorSede(colSede);
+    if (!filtro.sql) return { extra, params };
+    return { extra: `${extra} AND ${filtro.sql}`, params: [...params, ...filtro.params] };
+  }
   private meta(page: number, limit: number, total: number) { return { total, page, limit, lastPage: Math.max(1, Math.ceil(total / limit)) }; }
   private async paginar(table: string, alias: string, order: string, query: any, extra = '', params: any[] = []) {
     const page = Math.max(1, Number(query.page) || 1), limit = Math.min(100, Math.max(1, Number(query.limit) || 10));
@@ -37,9 +48,14 @@ export class InventarioService {
   }
   async removeInsumo(id: number, userId: number) { const old = await this.getInsumo(id); await this.db.query(`UPDATE cli_insumo SET estado_registro='ELIMINADO',estado='INACTIVO',id_usuario_mod=? WHERE id_insumo=?`, [userId, id]); await this.auditoria.registrar('cli_insumo', id, 'ELIMINAR', userId, old, null); return { message: 'Insumo eliminado' }; }
 
-  listLotes(q: any) { const extra = q.id_sede ? ' AND l.id_sede=?' : ''; return this.paginar('cli_lote', 'l', '(l.fecha_vencimiento IS NULL),l.fecha_vencimiento,l.fecha_ingreso', q, extra, q.id_sede ? [Number(q.id_sede)] : []); }
-  async getLote(id: number) { const [r] = await this.db.query(`SELECT * FROM cli_lote WHERE id_lote=? AND estado_registro='ACTIVO'`, [id]); if (!r) throw new NotFoundException('Lote no encontrado'); return r; }
+  async listLotes(q: any) {
+    if (q.id_sede) await this.unidad.exigirSede(Number(q.id_sede));
+    const sede = this.porSede('l.id_sede', q.id_sede ? ' AND l.id_sede=?' : '', q.id_sede ? [Number(q.id_sede)] : []);
+    return this.paginar('cli_lote', 'l', '(l.fecha_vencimiento IS NULL),l.fecha_vencimiento,l.fecha_ingreso', q, sede.extra, sede.params);
+  }
+  async getLote(id: number) { const [r] = await this.db.query(`SELECT * FROM cli_lote WHERE id_lote=? AND estado_registro='ACTIVO'`, [id]); if (!r) throw new NotFoundException('Lote no encontrado'); await this.unidad.exigirSede(Number(r.id_sede)); return r; }
   async createLote(d: CreateLoteDto, userId: number) {
+    await this.unidad.exigirSede(Number(d.id_sede));
     const qr = this.db.createQueryRunner(); await qr.connect(); await qr.startTransaction();
     try { const r = await qr.query(`INSERT INTO cli_lote (id_insumo,id_sede,id_proveedor,codigo_lote,fecha_ingreso,fecha_vencimiento,cantidad_inicial,cantidad_actual,costo_unitario,id_usuario_crea) VALUES (?,?,?,?,?,?,?,?,?,?)`, [d.id_insumo,d.id_sede,d.id_proveedor||null,d.codigo_lote,d.fecha_ingreso,d.fecha_vencimiento||null,d.cantidad_inicial,d.cantidad_inicial,d.costo_unitario??null,userId]);
       const id=Number(r.insertId); await qr.query(`INSERT INTO cli_movimiento_inventario (id_insumo,id_lote,id_sede,tipo_movimiento,cantidad,motivo,referencia_tipo,referencia_id,id_usuario_crea) VALUES (?,?,?,'INGRESO',?,'Ingreso de lote','LOTE',?,?)`,[d.id_insumo,id,d.id_sede,d.cantidad_inicial,id,userId]); await qr.commitTransaction(); return { id, message:'Lote creado' };
@@ -48,21 +64,57 @@ export class InventarioService {
   async updateLote(id:number,d:UpdateLoteDto,userId:number){ await this.getLote(id); await this.db.query(`UPDATE cli_lote SET id_proveedor=COALESCE(?,id_proveedor),codigo_lote=COALESCE(?,codigo_lote),fecha_vencimiento=COALESCE(?,fecha_vencimiento),costo_unitario=COALESCE(?,costo_unitario),id_usuario_mod=? WHERE id_lote=? AND estado_registro='ACTIVO'`,[d.id_proveedor??null,d.codigo_lote??null,d.fecha_vencimiento??null,d.costo_unitario??null,userId,id]); return {message:'Lote actualizado'}; }
   async removeLote(id:number,userId:number){ const l=await this.getLote(id); if(Number(l.cantidad_actual)>0) throw new BadRequestException('No se puede eliminar un lote con stock'); await this.db.query(`UPDATE cli_lote SET estado_registro='ELIMINADO',id_usuario_mod=? WHERE id_lote=?`,[userId,id]); return {message:'Lote eliminado'}; }
 
-  listMovimientos(q:any){ return this.paginar('cli_movimiento_inventario','m','m.fecha_movimiento DESC',q,q.id_sede?' AND m.id_sede=?':'',q.id_sede?[Number(q.id_sede)]:[]); }
-  async getMovimiento(id:number){const[r]=await this.db.query(`SELECT * FROM cli_movimiento_inventario WHERE id_movimiento_inventario=? AND estado_registro='ACTIVO'`,[id]);if(!r)throw new NotFoundException('Movimiento no encontrado');return r;}
+  async listMovimientos(q:any){
+    if (q.id_sede) await this.unidad.exigirSede(Number(q.id_sede));
+    const sede = this.porSede('m.id_sede', q.id_sede ? ' AND m.id_sede=?' : '', q.id_sede ? [Number(q.id_sede)] : []);
+    return this.paginar('cli_movimiento_inventario','m','m.fecha_movimiento DESC',q,sede.extra,sede.params);
+  }
+  async getMovimiento(id:number){const[r]=await this.db.query(`SELECT * FROM cli_movimiento_inventario WHERE id_movimiento_inventario=? AND estado_registro='ACTIVO'`,[id]);if(!r)throw new NotFoundException('Movimiento no encontrado');await this.unidad.exigirSede(Number(r.id_sede));return r;}
   async updateMovimiento(id:number,d:any,userId:number){await this.getMovimiento(id);await this.db.query(`UPDATE cli_movimiento_inventario SET motivo=COALESCE(?,motivo),id_usuario_mod=? WHERE id_movimiento_inventario=? AND estado_registro='ACTIVO'`,[d.motivo??null,userId,id]);return{message:'Movimiento actualizado'};}
   async removeMovimiento(id:number,userId:number){await this.getMovimiento(id);await this.db.query(`UPDATE cli_movimiento_inventario SET estado_registro='ELIMINADO',id_usuario_mod=? WHERE id_movimiento_inventario=?`,[userId,id]);return{message:'Movimiento eliminado del kardex visible'};}
   async movimiento(d:MovimientoDto,userId:number){
     if(!d.cantidad || d.cantidad < 0) throw new BadRequestException('Cantidad debe ser positiva');
+    await this.unidad.exigirSede(Number(d.id_sede));
     const qr=this.db.createQueryRunner(); await qr.connect(); await qr.startTransaction();
-    try { const signo=['SALIDA'].includes(d.tipo_movimiento)?-1:1; if(d.id_lote){ const [l]=await qr.query(`SELECT * FROM cli_lote WHERE id_lote=? AND estado_registro='ACTIVO' FOR UPDATE`,[d.id_lote]); if(!l) throw new NotFoundException('Lote no encontrado'); if(signo<0&&Number(l.cantidad_actual)<d.cantidad) throw new BadRequestException('Stock insuficiente'); await qr.query(`UPDATE cli_lote SET cantidad_actual=cantidad_actual+?,estado=IF(cantidad_actual+?=0,'AGOTADO','DISPONIBLE'),id_usuario_mod=? WHERE id_lote=?`,[signo*d.cantidad,signo*d.cantidad,userId,d.id_lote]); }
+    try { const signo=['SALIDA'].includes(d.tipo_movimiento)?-1:1; if(d.id_lote){ const [l]=await qr.query(`SELECT * FROM cli_lote WHERE id_lote=? AND estado_registro='ACTIVO' FOR UPDATE`,[d.id_lote]); if(!l) throw new NotFoundException('Lote no encontrado'); if(Number(l.id_sede)!==Number(d.id_sede)){ await this.unidad.exigirSede(Number(l.id_sede)); throw new BadRequestException('El lote no pertenece a la sede indicada'); } if(signo<0&&Number(l.cantidad_actual)<d.cantidad) throw new BadRequestException('Stock insuficiente'); await qr.query(`UPDATE cli_lote SET cantidad_actual=cantidad_actual+?,estado=IF(cantidad_actual+?=0,'AGOTADO','DISPONIBLE'),id_usuario_mod=? WHERE id_lote=?`,[signo*d.cantidad,signo*d.cantidad,userId,d.id_lote]); }
       const r=await qr.query(`INSERT INTO cli_movimiento_inventario (id_insumo,id_lote,id_sede,tipo_movimiento,cantidad,motivo,referencia_tipo,id_usuario_crea) VALUES (?,?,?,?,?,?,'MANUAL',?)`,[d.id_insumo,d.id_lote||null,d.id_sede,d.tipo_movimiento,d.cantidad,d.motivo||null,userId]); await qr.commitTransaction(); return {id:Number(r.insertId),message:'Movimiento registrado'}; }catch(e){await qr.rollbackTransaction();throw e;}finally{await qr.release();}
   }
-  alertas(q:any){ const sede=q.id_sede?Number(q.id_sede):null; return this.db.query(`SELECT i.id_insumo,i.nombre,l.id_sede,SUM(l.cantidad_actual) stock,i.stock_minimo,MIN(l.fecha_vencimiento) proximo_vencimiento FROM cli_insumo i LEFT JOIN cli_lote l ON l.id_insumo=i.id_insumo AND l.estado_registro='ACTIVO' AND (? IS NULL OR l.id_sede=?) WHERE i.estado_registro='ACTIVO' GROUP BY i.id_insumo,i.nombre,l.id_sede,i.stock_minimo HAVING stock<=i.stock_minimo OR proximo_vencimiento<=DATE_ADD(CURDATE(),INTERVAL 30 DAY)`,[sede,sede]); }
-  listTransferencias(q:any){return this.paginar('cli_transferencia_sede','t','t.fecha_transferencia DESC',q);}
-  async transferir(d:TransferenciaDto,userId:number){ if(d.id_sede_origen===d.id_sede_destino) throw new BadRequestException('Las sedes deben ser distintas'); const qr=this.db.createQueryRunner();await qr.connect();await qr.startTransaction();try{const [l]=await qr.query(`SELECT * FROM cli_lote WHERE id_lote=? AND id_insumo=? AND id_sede=? AND estado_registro='ACTIVO' FOR UPDATE`,[d.id_lote_origen,d.id_insumo,d.id_sede_origen]);if(!l||Number(l.cantidad_actual)<d.cantidad)throw new BadRequestException('Stock insuficiente');const tr=await qr.query(`INSERT INTO cli_transferencia_sede (id_insumo,id_lote_origen,id_sede_origen,id_sede_destino,cantidad,estado,observaciones,id_usuario_crea) VALUES (?,?,?,?,?,'RECIBIDA',?,?)`,[d.id_insumo,d.id_lote_origen,d.id_sede_origen,d.id_sede_destino,d.cantidad,d.observaciones||null,userId]);const tid=Number(tr.insertId);await qr.query(`UPDATE cli_lote SET cantidad_actual=cantidad_actual-?,estado=IF(cantidad_actual-?=0,'AGOTADO','DISPONIBLE'),id_usuario_mod=? WHERE id_lote=?`,[d.cantidad,d.cantidad,userId,d.id_lote_origen]);const code=`${l.codigo_lote}-T${tid}`;const nr=await qr.query(`INSERT INTO cli_lote (id_insumo,id_sede,id_proveedor,codigo_lote,fecha_ingreso,fecha_vencimiento,cantidad_inicial,cantidad_actual,costo_unitario,id_usuario_crea) VALUES (?,?,?,?,CURDATE(),?,?,?,?,?)`,[d.id_insumo,d.id_sede_destino,l.id_proveedor,code,l.fecha_vencimiento,d.cantidad,d.cantidad,l.costo_unitario,userId]);const nid=Number(nr.insertId);for(const [sede,lote,tipo] of [[d.id_sede_origen,d.id_lote_origen,'TRANSFERENCIA_OUT'],[d.id_sede_destino,nid,'TRANSFERENCIA_IN']] as any[])await qr.query(`INSERT INTO cli_movimiento_inventario (id_insumo,id_lote,id_sede,tipo_movimiento,cantidad,referencia_tipo,referencia_id,id_usuario_crea) VALUES (?,?,?,?,?,'TRANSFERENCIA',?,?)`,[d.id_insumo,lote,sede,tipo,d.cantidad,tid,userId]);await qr.commitTransaction();return{id:tid,message:'Transferencia completada'};}catch(e){await qr.rollbackTransaction();throw e;}finally{await qr.release();}}
+  async alertas(q:any){
+    const sede = q.id_sede ? Number(q.id_sede) : null;
+    if (sede) await this.unidad.exigirSede(sede);
+    const filtro = this.unidad.sqlPorSede('l.id_sede');
+    const empresa = filtro.sql ? ` AND ${filtro.sql}` : '';
+    return this.db.query(
+      `SELECT i.id_insumo,i.nombre,l.id_sede,SUM(l.cantidad_actual) stock,i.stock_minimo,MIN(l.fecha_vencimiento) proximo_vencimiento
+       FROM cli_insumo i
+       LEFT JOIN cli_lote l ON l.id_insumo=i.id_insumo AND l.estado_registro='ACTIVO' AND (? IS NULL OR l.id_sede=?)${empresa}
+       WHERE i.estado_registro='ACTIVO'
+       GROUP BY i.id_insumo,i.nombre,l.id_sede,i.stock_minimo
+       HAVING stock<=i.stock_minimo OR proximo_vencimiento<=DATE_ADD(CURDATE(),INTERVAL 30 DAY)`,
+      [sede, sede, ...filtro.params],
+    );
+  }
+  async listTransferencias(q:any){
+    const origen = this.unidad.sqlPorSede('t.id_sede_origen');
+    const destino = this.unidad.sqlPorSede('t.id_sede_destino');
+    let extra = '';
+    const params: any[] = [];
+    if (origen.sql && destino.sql) {
+      extra = ` AND ${origen.sql} AND ${destino.sql}`;
+      params.push(...origen.params, ...destino.params);
+    }
+    return this.paginar('cli_transferencia_sede','t','t.fecha_transferencia DESC',q,extra,params);
+  }
+  async transferir(d:TransferenciaDto,userId:number){
+    if(d.id_sede_origen===d.id_sede_destino) throw new BadRequestException('Las sedes deben ser distintas');
+    const origen = await this.unidad.exigirSede(Number(d.id_sede_origen));
+    const destino = await this.unidad.exigirSede(Number(d.id_sede_destino));
+    if (origen.id_unidad !== destino.id_unidad) {
+      throw new ForbiddenException('No se puede transferir inventario entre empresas');
+    }
+    const qr=this.db.createQueryRunner();await qr.connect();await qr.startTransaction();try{const [l]=await qr.query(`SELECT * FROM cli_lote WHERE id_lote=? AND id_insumo=? AND id_sede=? AND estado_registro='ACTIVO' FOR UPDATE`,[d.id_lote_origen,d.id_insumo,d.id_sede_origen]);if(!l||Number(l.cantidad_actual)<d.cantidad)throw new BadRequestException('Stock insuficiente');const tr=await qr.query(`INSERT INTO cli_transferencia_sede (id_insumo,id_lote_origen,id_sede_origen,id_sede_destino,cantidad,estado,observaciones,id_usuario_crea) VALUES (?,?,?,?,?,'RECIBIDA',?,?)`,[d.id_insumo,d.id_lote_origen,d.id_sede_origen,d.id_sede_destino,d.cantidad,d.observaciones||null,userId]);const tid=Number(tr.insertId);await qr.query(`UPDATE cli_lote SET cantidad_actual=cantidad_actual-?,estado=IF(cantidad_actual-?=0,'AGOTADO','DISPONIBLE'),id_usuario_mod=? WHERE id_lote=?`,[d.cantidad,d.cantidad,userId,d.id_lote_origen]);const code=`${l.codigo_lote}-T${tid}`;const nr=await qr.query(`INSERT INTO cli_lote (id_insumo,id_sede,id_proveedor,codigo_lote,fecha_ingreso,fecha_vencimiento,cantidad_inicial,cantidad_actual,costo_unitario,id_usuario_crea) VALUES (?,?,?,?,CURDATE(),?,?,?,?,?)`,[d.id_insumo,d.id_sede_destino,l.id_proveedor,code,l.fecha_vencimiento,d.cantidad,d.cantidad,l.costo_unitario,userId]);const nid=Number(nr.insertId);for(const [sede,lote,tipo] of [[d.id_sede_origen,d.id_lote_origen,'TRANSFERENCIA_OUT'],[d.id_sede_destino,nid,'TRANSFERENCIA_IN']] as any[])await qr.query(`INSERT INTO cli_movimiento_inventario (id_insumo,id_lote,id_sede,tipo_movimiento,cantidad,referencia_tipo,referencia_id,id_usuario_crea) VALUES (?,?,?,?,?,'TRANSFERENCIA',?,?)`,[d.id_insumo,lote,sede,tipo,d.cantidad,tid,userId]);await qr.commitTransaction();return{id:tid,message:'Transferencia completada'};}catch(e){await qr.rollbackTransaction();throw e;}finally{await qr.release();}}
 
   private async descontarFefo(qr:QueryRunner,idInsumo:number,idSede:number,cantidad:number,idCita:number,userId:number){let restante=cantidad;const lotes=await qr.query(`SELECT * FROM cli_lote WHERE id_insumo=? AND id_sede=? AND cantidad_actual>0 AND estado='DISPONIBLE' AND estado_registro='ACTIVO' AND (fecha_vencimiento IS NULL OR fecha_vencimiento>=CURDATE()) ORDER BY fecha_vencimiento IS NULL,fecha_vencimiento,fecha_ingreso FOR UPDATE`,[idInsumo,idSede]);if(lotes.reduce((s:number,l:any)=>s+Number(l.cantidad_actual),0)<cantidad)throw new BadRequestException(`Stock insuficiente para insumo ${idInsumo}`);for(const l of lotes){if(restante<=0)break;const uso=Math.min(restante,Number(l.cantidad_actual));await qr.query(`UPDATE cli_lote SET cantidad_actual=cantidad_actual-?,estado=IF(cantidad_actual-?=0,'AGOTADO','DISPONIBLE'),id_usuario_mod=? WHERE id_lote=?`,[uso,uso,userId,l.id_lote]);await qr.query(`INSERT INTO cli_movimiento_inventario (id_insumo,id_lote,id_sede,tipo_movimiento,cantidad,motivo,referencia_tipo,referencia_id,id_usuario_crea) VALUES (?,?,?,'SALIDA',?,'Consumo clínico','CITA',?,?)`,[idInsumo,l.id_lote,idSede,uso,idCita,userId]);restante-=uso;}}
   @OnEvent('cita.completada')
-  async consumirCita(p:{id_cita:number;id_tratamiento:number;id_sede:number;userId:number}){const qr=this.db.createQueryRunner();await qr.connect();await qr.startTransaction();try{const insumos=await qr.query(`SELECT id_insumo,cantidad FROM cli_tratamiento_insumo WHERE id_tratamiento=? AND estado_registro='ACTIVO'`,[p.id_tratamiento]);for(const i of insumos)await this.descontarFefo(qr,Number(i.id_insumo),Number(p.id_sede),Number(i.cantidad),Number(p.id_cita),Number(p.userId));await qr.commitTransaction();}catch(e){await qr.rollbackTransaction();throw e;}finally{await qr.release();}}
+  async consumirCita(p:{id_cita:number;id_tratamiento:number;id_sede:number;userId:number}){const qr=this.db.createQueryRunner();await qr.connect();await qr.startTransaction();try{const [cita]=await qr.query(`SELECT id_sede,id_unidad FROM cli_cita WHERE id_cita=? AND estado_registro='ACTIVO'`,[p.id_cita]);const [sede]=await qr.query(`SELECT id_unidad FROM cli_sede WHERE id_sede=? AND estado_registro='ACTIVO'`,[p.id_sede]);if(!cita||!sede||Number(cita.id_sede)!==Number(p.id_sede)||cita.id_unidad==null||Number(cita.id_unidad)!==Number(sede.id_unidad))throw new ForbiddenException('La sede no pertenece a la empresa de la cita');const insumos=await qr.query(`SELECT id_insumo,cantidad FROM cli_tratamiento_insumo WHERE id_tratamiento=? AND estado_registro='ACTIVO'`,[p.id_tratamiento]);for(const i of insumos)await this.descontarFefo(qr,Number(i.id_insumo),Number(p.id_sede),Number(i.cantidad),Number(p.id_cita),Number(p.userId));await qr.commitTransaction();}catch(e){await qr.rollbackTransaction();throw e;}finally{await qr.release();}}
 }

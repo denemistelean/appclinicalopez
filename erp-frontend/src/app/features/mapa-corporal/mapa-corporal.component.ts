@@ -61,6 +61,10 @@ export class MapaCorporalComponent implements AfterViewInit, OnChanges, OnDestro
   @Input() idPaciente: number | null = null;
   @Input() idCita: number | null = null;
   @Input() idConsulta: number | null = null;
+  /** Si viene informado, reemplaza el catálogo quirúrgico de López. */
+  @Input() procedimientosItems: { id: string; nombre: string }[] | null = null;
+  @Input() etiquetaProcedimiento = 'Procedimiento';
+  @Input() soloLectura = false;
 
   private fb = inject(FormBuilder);
   private service = inject(MapaCorporalService);
@@ -83,6 +87,10 @@ export class MapaCorporalComponent implements AfterViewInit, OnChanges, OnDestro
   capturando = signal(false);
 
   procedimientos = PROCEDIMIENTOS_MAPA;
+
+  listaProcedimientos(): { id: string; nombre: string }[] {
+    return this.procedimientosItems?.length ? this.procedimientosItems : this.procedimientos;
+  }
   estados = ESTADOS_MAPA;
   formPac: FormGroup;
   formZona: FormGroup;
@@ -499,7 +507,12 @@ export class MapaCorporalComponent implements AfterViewInit, OnChanges, OnDestro
       const posterior = this.captureWithNumbers('back');
 
       await new Promise<void>((resolve, reject) => {
-        this.service.guardarCapturas(idPaciente, { frontal, posterior }).subscribe({
+        this.service.guardarCapturas(idPaciente, {
+          frontal,
+          posterior,
+          id_cita: this.idCita ? Number(this.idCita) : null,
+          id_consulta: this.idConsulta ? Number(this.idConsulta) : null,
+        }).subscribe({
           next: () => resolve(),
           error: (err) => reject(err),
         });

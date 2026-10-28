@@ -1,4 +1,4 @@
-import { Component, inject, computed, OnInit, signal } from '@angular/core';
+import { Component, inject, computed, OnInit, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
@@ -9,6 +9,8 @@ import { LayoutService } from '../../services/layout.service';
 import { PermissionsService } from '../../services/seguridad/permissions.service';
 import { AuthService } from '../../services/auth.service';
 import { AlertService } from '../../services/ui/alert.service';
+import { UnidadContextService } from '../../services/unidad-context.service';
+import { marcaDeEmpresa } from '../../marca-empresa';
 
 @Component({
   selector: 'app-sidebar',
@@ -26,6 +28,7 @@ export class Sidebar implements OnInit {
   private authService = inject(AuthService);
   private alert = inject(AlertService);
   private router = inject(Router);
+  private unidad = inject(UnidadContextService);
 
   searchControl = new FormControl('');
   searchTerm = toSignal(this.searchControl.valueChanges, { initialValue: '' });
@@ -34,6 +37,17 @@ export class Sidebar implements OnInit {
 
   usuarioActual: any = null;
   logoError = signal(false);
+  readonly codigoEmpresa = computed(() => (
+    this.unidad.membresias().find((m) => m.id_unidad === this.unidad.idUnidad())?.codigo || ''
+  ).toUpperCase());
+  readonly marca = computed(() => marcaDeEmpresa(this.codigoEmpresa()));
+
+  constructor() {
+    effect(() => {
+      this.marca().logo;
+      this.logoError.set(false);
+    });
+  }
 
   private rawMenu: any[] = [
     {
@@ -64,7 +78,8 @@ export class Sidebar implements OnInit {
       children: [
         { label: 'Sedes', icon: 'bi-building', route: '/sedes', type: 'link', permiso: 'ver_sede' },
         { label: 'Personal', icon: 'bi-person-badge', route: '/personal', type: 'link', permiso: 'ver_personal' },
-        { label: 'Procedimientos', icon: 'bi-clipboard2-pulse', route: '/tratamientos', type: 'link', permiso: 'ver_tratamiento' },
+        { label: 'Procedimientos', icon: 'bi-clipboard2-pulse', route: '/tratamientos', type: 'link', permiso: 'ver_tratamiento', empresa: 'LOPEZ' },
+        { label: 'Servicios', icon: 'bi-tags', route: '/catalogo', type: 'link', permiso: 'ver_tratamiento', empresa: 'SORELA' },
         // Ocultos temporalmente: Inventario, Consentimientos, Fotos evolución, Facturación, Notificaciones
         { label: 'Pacientes', icon: 'bi-person-vcard', route: '/pacientes', type: 'link', permiso: 'ver_paciente' },
         { label: 'Agenda', icon: 'bi-calendar2-week', route: '/agenda', type: 'link', permiso: 'ver_cita' },
@@ -95,6 +110,7 @@ export class Sidebar implements OnInit {
     const text = (this.searchTerm() || '').toLowerCase();
     const isSearching = text.length > 0;
     const permsLoaded = this.perms.permissionsSignal().length > 0;
+    const empresa = this.codigoEmpresa();
 
     const result = this.rawMenu.map((item) => {
       if (item.type === 'link') {
@@ -104,7 +120,10 @@ export class Sidebar implements OnInit {
       }
 
       if (item.type === 'dropdown') {
+        // OMNI: el menú sigue a la unidad activa (codigoEmpresa); al cambiar empresa en el selector se recalcula.
         let children = (item.children || []).filter((sub: any) => {
+          if (sub.empresa === 'SORELA' && empresa !== 'SORELA') return false;
+          if (sub.empresa === 'LOPEZ' && empresa === 'SORELA') return false;
           if (permsLoaded && sub.permiso && !this.perms.hasPermission(sub.permiso)) return false;
           return true;
         });

@@ -10,6 +10,8 @@ export class CreatePacienteDto {
   @IsOptional() @IsIn(['M', 'F', 'X', 'NO_ESPECIFICADO']) sexo?: string;
   @IsOptional() @IsString() telefono?: string;
   @IsOptional() @IsString() telefono_alterno?: string;
+  /** Número para envío por WhatsApp (wa.me). */
+  @IsOptional() @IsString() @MaxLength(40) telefono_whatsapp?: string;
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() direccion?: string;
   @IsOptional() @IsString() distrito?: string;

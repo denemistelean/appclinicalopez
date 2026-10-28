@@ -8,6 +8,8 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { exigirSecretoJwt } from './jwt-secreto';
+import { UnidadScopeService } from './unidad/unidad-scope.service';
 
 @Global()
 @Module({
@@ -16,16 +18,16 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     // Configuramos la fábrica de tokens (pulseras)
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET'),
+      useFactory: (config: ConfigService) => ({
+        secret: exigirSecretoJwt(config.get<string>('JWT_SECRET')),
         signOptions: { 
-          expiresIn: (config.get<string>('JWT_EXPIRES_IN') || '8h') as any 
+          expiresIn: (config.get<string>('JWT_EXPIRES_IN') || '15m') as any 
         },
       }),
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, PermissionsGuard],
-  exports: [AuthService, JwtModule, PassportModule, JwtStrategy, JwtAuthGuard, PermissionsGuard],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, PermissionsGuard, UnidadScopeService],
+  exports: [AuthService, JwtModule, PassportModule, JwtStrategy, JwtAuthGuard, PermissionsGuard, UnidadScopeService],
 })
 export class AuthModule {}

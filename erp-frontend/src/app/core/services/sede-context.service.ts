@@ -26,9 +26,8 @@ export class SedeContextService {
 
   private readInitial(): SedeSeleccion {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return 'TODAS';
-    if (raw === 'TODAS') return 'TODAS';
+    if (!raw || raw === 'TODAS') return null;
     const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : 'TODAS';
+    return Number.isFinite(n) && n > 0 ? n : null;
   }
 }

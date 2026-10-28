@@ -1,47 +1,118 @@
-/* Estilos de paginación cubiertos por styles.scss (sección 7 y fix :focus) */
+.vista-encabezado {
+  margin-bottom: 0.75rem;
 
-/* Header del componente */
-.table-header-row {
-    min-width: 0;
-    gap: 12px;
+  h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--erp-text);
+  }
+
+  p {
+    margin: 0.15rem 0 0;
+    color: var(--erp-text-muted);
+    font-size: 0.86rem;
+  }
 }
 
-.table-title-col {
-    min-width: 0;
+.vista-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  background: var(--erp-card);
+  border: 1px solid var(--erp-border-soft);
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.85rem;
 }
 
-/* En celular el buscador ocupa el espacio disponible (flex-grow-1 en el HTML);
-   recién a partir de md (≥768px) vuelve al ancho fijo de escritorio. */
-.search-sniper-group {
+.vista-campo {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  margin: 0;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--erp-text-muted);
+  }
+
+  input {
     width: 100%;
-}
-@media (min-width: 768px) {
-    .search-sniper-group {
-        width: 250px;
-    }
+    border: 1px solid var(--erp-border-input);
+    border-radius: 12px;
+    background: var(--erp-card);
+    color: var(--erp-text);
+    padding: 0.55rem 0.75rem;
+    outline: none;
+  }
 }
 
-/* Barra de progreso de carga */
+.vista-nuevo {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 14px;
+  background: var(--erp-primary);
+  color: #fff;
+  font-weight: 700;
+  padding: 0.72rem 1.1rem;
+  white-space: nowrap;
+}
+
+.vista-tabla {
+  background: var(--erp-card);
+  border: 1px solid var(--erp-border-soft);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
 .table-loading-bar {
-    height: 3px;
-    border-radius: 0;
-    background-color: var(--erp-border-soft);
+  height: 3px;
+  border-radius: 0;
+  background-color: var(--erp-border-soft);
 
-    .progress-bar {
-        background: linear-gradient(90deg, var(--erp-primary), var(--erp-secondary));
-    }
+  .progress-bar {
+    background: var(--erp-primary);
+  }
 }
 
-/* Footer de paginación */
-.table-pagination-footer {
-    border-top: 1px solid var(--erp-border-soft);
+.vista-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.8rem 1rem;
+  color: var(--erp-text-muted);
+  font-size: 0.86rem;
+  border-top: 1px solid var(--erp-border-soft);
 }
 
-/* Bootstrap table CSS vars — sobreescriben el tema claro hardcodeado */
-::ng-deep .table {
-    --bs-table-bg: transparent;
-    --bs-table-color: var(--erp-text);
-    --bs-table-hover-bg: var(--erp-btn-soft-bg);
-    --bs-table-hover-color: var(--erp-text);
-    --bs-table-border-color: var(--erp-border-soft);
+@media (max-width: 767.98px) {
+  .vista-nuevo {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .vista-encabezado h2 {
+    font-size: 1.1rem;
+  }
+
+  .vista-pie {
+    justify-content: center;
+    text-align: center;
+  }
 }

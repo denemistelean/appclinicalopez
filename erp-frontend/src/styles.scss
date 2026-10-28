@@ -555,25 +555,24 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover { background: rgba(var(--erp-prim
 .card-pro {
     background: var(--erp-card);
     border: 1px solid var(--erp-border-soft) !important;
-    border-top: 2px solid rgba(var(--erp-primary-rgb), 0.45) !important;
-    border-radius: var(--rad-lg) !important;
-    box-shadow: 0 2px 12px rgba(var(--erp-shadow-rgb), 0.06) !important;
-    transition: box-shadow 0.25s ease, border-top-color 0.25s ease;
+    border-radius: 18px !important;
+    box-shadow: 0 8px 24px rgba(var(--erp-shadow-rgb), 0.05) !important;
+    transition: box-shadow 0.25s ease;
 }
 .card-pro:hover {
-    border-top-color: rgba(var(--erp-primary-rgb), 0.85) !important;
-    box-shadow: 0 4px 20px rgba(var(--erp-shadow-rgb), 0.09) !important;
+    box-shadow: 0 10px 28px rgba(var(--erp-shadow-rgb), 0.08) !important;
+}
+.login-page .card-pro {
+    border-top: 2px solid rgba(var(--erp-primary-rgb), 0.45) !important;
+    border-radius: var(--rad-lg) !important;
 }
 body.dark-mode .card-pro {
     background: var(--erp-card);
     border: 1px solid rgba(var(--erp-primary-rgb), 0.13) !important;
-    border-top: 2px solid rgba(var(--erp-primary-rgb), 0.55) !important;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4) !important;
-    transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
 body.dark-mode .card-pro:hover {
     border-color: rgba(var(--erp-primary-rgb), 0.28) !important;
-    border-top-color: rgba(var(--erp-primary-rgb), 0.9) !important;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
 }
 
@@ -917,22 +916,34 @@ body.dark-mode .ng-dropdown-panel .ng-option.ng-option-selected {
     color: #fff !important;
 }
 
-.pagination { 
-    margin-bottom: 0; 
+.pagination {
+    margin-bottom: 0;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
-.pagination .page-item .page-link { 
-    background-color: var(--erp-card) !important; 
-    border-color: var(--erp-border-soft) !important; 
-    color: var(--erp-text) !important; 
-    transition: all 0.2s ease !important; 
+.pagination .page-item .page-link {
+    background-color: var(--erp-card) !important;
+    border: 1px solid var(--erp-border-soft) !important;
+    color: var(--erp-text) !important;
+    border-radius: 10px !important;
+    min-width: 34px;
+    height: 34px;
+    margin: 0 !important;
+    padding: 0 0.4rem !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    transition: background-color 0.15s ease !important;
 }
 
-.pagination .page-item.active .page-link { 
-    background-color: var(--erp-primary) !important; 
-    border-color: var(--erp-primary) !important; 
-    color: var(--erp-card) !important; 
-    box-shadow: 0 4px 10px rgba(var(--erp-primary-rgb), 0.3) !important; 
+.pagination .page-item.active .page-link {
+    background-color: var(--erp-primary) !important;
+    border-color: var(--erp-primary) !important;
+    color: #fff !important;
+    box-shadow: none !important;
 }
 
 .pagination .page-item.disabled .page-link { 
@@ -1942,19 +1953,41 @@ body.dark-mode .table-header-erp {
     background-color: rgba(var(--erp-primary-rgb), 0.06) !important;
 }
 
-/* thead — estándar en todos los módulos */
-.table-pro-container thead th {
-    font-size: var(--fs-xs) !important;
-    font-weight: var(--fw-heavy) !important;
-    color: var(--erp-text-muted) !important;
+.card-pro.table-pro-container {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* thead — cabecera oscura, fuera de los modales */
+.table-pro-container .table-responsive > table > thead th,
+.table > thead > tr > th,
+.rp-table th {
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    color: #fff !important;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding-top: 0.65rem !important;
-    padding-bottom: 0.65rem !important;
+    letter-spacing: 0.04em;
+    padding: 0.9rem 0.8rem !important;
     white-space: nowrap;
+    background-color: #10243f !important;
+    border: 0 !important;
+}
+
+.modal .table > thead > tr > th {
     background-color: transparent !important;
-    border-bottom: 2px solid var(--erp-border-soft) !important;
-    border-top: none !important;
+    color: var(--erp-text-muted) !important;
+    border-bottom: 1px solid var(--erp-border-soft) !important;
+}
+
+@media (max-width: 767.98px) {
+    .card-pro,
+    .vista-tabla,
+    .cat-tabla,
+    .rp-panel {
+        overflow-x: auto;
+    }
 }
 
 /* tbody td — texto y padding vertical consistente (horizontal lo define cada th/td con ps-4, pe-4, etc.) */

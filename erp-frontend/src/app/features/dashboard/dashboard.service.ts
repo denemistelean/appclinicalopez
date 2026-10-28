@@ -13,4 +13,31 @@ export class DashboardService {
     if (idSucursal) params = params.set('id_sucursal', String(idSucursal));
     return this.http.get(`${this.apiUrl}/resumen`, { params });
   }
+
+  previewRecordatorio(data: {
+    id_cita: number;
+    id_plantilla?: number;
+    cuerpo?: string;
+  }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/recordatorio/preview`, data);
+  }
+
+  listPlantillas(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/plantillas`);
+  }
+
+  crearPlantilla(data: { nombre: string; cuerpo: string; codigo?: string; canal?: string }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/plantillas`, data);
+  }
+
+  actualizarPlantilla(
+    id: number,
+    data: { nombre?: string; cuerpo?: string; canal?: string; activo?: boolean },
+  ): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/plantillas/${id}`, data);
+  }
+
+  eliminarPlantilla(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/plantillas/${id}`);
+  }
 }

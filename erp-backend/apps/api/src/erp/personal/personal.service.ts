@@ -9,8 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { basename, extname, join } from 'path';
+import { resolverDocumentosRoot } from '../../core/archivos/documentos-root';
 import { DataSource } from 'typeorm';
 import { AuditoriaService } from '@app/common';
+import { UnidadScopeService } from '@app/auth';
 import {
   CreateCertificacionDto,
   CreateCredencialDto,
@@ -28,13 +30,14 @@ export class PersonalService {
     @InjectDataSource('APP_DB_CONN') private readonly dataSource: DataSource,
     private readonly auditoriaService: AuditoriaService,
     private readonly config: ConfigService,
+    private readonly unidad: UnidadScopeService,
   ) {}
 
   private docsRoot() {
-    return (
-      this.config.get<string>('DOCUMENTOS_ROOT') ||
-      join(process.cwd(), '..', '..', 'storage', 'ClinicaDigital')
-    );
+    return resolverDocumentosRoot({
+      configurada: this.config.get<string>('DOCUMENTOS_ROOT'),
+      respaldo: join(process.cwd(), '..', '..', 'storage', 'ClinicaDigital'),
+    });
   }
 
   private pageMeta(page: number, limit: number, total: number) {
@@ -63,12 +66,18 @@ export class PersonalService {
       params.push(estado);
     }
     if (idSede) {
+      await this.unidad.exigirSede(idSede);
       where.push(`EXISTS (
         SELECT 1 FROM cli_personal_sede ps
         WHERE ps.id_personal = p.id_personal AND ps.id_sede = ?
           AND ps.estado_registro = 'ACTIVO'
       )`);
       params.push(idSede);
+    }
+    const filtro = this.unidad.sqlPersonal();
+    if (filtro.sql) {
+      where.push(filtro.sql);
+      params.push(...filtro.params);
     }
 
     const sqlWhere = where.join(' AND ');
@@ -94,6 +103,7 @@ export class PersonalService {
       [id],
     );
     if (!row) throw new NotFoundException('Personal no encontrado');
+    await this.unidad.exigirPersonal(Number(row.id_personal), row.id_sede_principal);
     const sedes = await this.dataSource.query(
       `SELECT ps.id_personal_sede, ps.id_sede, ps.es_principal, s.nombre AS sede_nombre
        FROM cli_personal_sede ps
@@ -118,6 +128,10 @@ export class PersonalService {
     };
   }
 
+  private async exigirSedesAsignables(ids: number[]) {
+    for (const idSede of ids) await this.unidad.exigirSede(Number(idSede));
+  }
+
   private async syncSedesInTx(
     qr: any,
     idPersonal: number,
@@ -126,6 +140,8 @@ export class PersonalService {
     userId: number,
   ) {
     const unique = [...new Set(sedes.map(Number).filter((n) => Number.isFinite(n) && n > 0))];
+    await this.exigirSedesAsignables(unique);
+    if (idPrincipal) await this.unidad.exigirSede(Number(idPrincipal));
     let principal = idPrincipal && unique.includes(Number(idPrincipal)) ? Number(idPrincipal) : null;
     if (!principal && unique.length) principal = unique[0];
 
@@ -296,6 +312,7 @@ export class PersonalService {
       if (Array.isArray(dto.ids_especialidad)) {
         espTexto = await this.syncEspecialidades(qr, id, dto.ids_especialidad, userId);
       }
+      if (dto.id_sede_principal) await this.unidad.exigirSede(Number(dto.id_sede_principal));
       const res = await qr.query(
         `UPDATE cli_personal SET
           documento = COALESCE(?, documento),
@@ -379,6 +396,8 @@ export class PersonalService {
     await this.findOne(id);
     const sedes = (dto.sedes || []).map(Number).filter(Boolean);
     const principal = dto.id_sede_principal ? Number(dto.id_sede_principal) : null;
+    await this.exigirSedesAsignables(sedes);
+    if (principal) await this.unidad.exigirSede(principal);
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -428,6 +447,7 @@ export class PersonalService {
   async replaceHorario(id: number, dto: ReplaceHorarioDto, userId: number) {
     await this.findOne(id);
     const items = dto.items || [];
+    for (const item of items) await this.unidad.exigirSede(Number(item.id_sede));
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -476,6 +496,7 @@ export class PersonalService {
 
   async createExcepcion(id: number, dto: CreateExcepcionDto, userId: number) {
     await this.findOne(id);
+    if (dto.id_sede) await this.unidad.exigirSede(Number(dto.id_sede));
     if (!dto.fecha) throw new BadRequestException('fecha requerida');
     const res = await this.dataSource.query(
       `INSERT INTO cli_excepcion_horario
@@ -580,6 +601,7 @@ export class PersonalService {
     idPersonal: number,
     idCert: number,
   ): Promise<{ file: StreamableFile; mime: string; nombre: string }> {
+    await this.findOne(idPersonal);
     const [row] = await this.dataSource.query(
       `SELECT * FROM cli_personal_certificacion
        WHERE id_personal_certificacion = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
@@ -596,6 +618,7 @@ export class PersonalService {
   }
 
   async removeCertificacion(idPersonal: number, idCert: number, userId: number) {
+    await this.findOne(idPersonal);
     const [antiguo] = await this.dataSource.query(
       `SELECT * FROM cli_personal_certificacion
        WHERE id_personal_certificacion = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
@@ -674,6 +697,7 @@ export class PersonalService {
     dto: UpdateCredencialDto,
     userId: number,
   ) {
+    await this.findOne(idPersonal);
     const [antiguo] = await this.dataSource.query(
       `SELECT * FROM cli_personal_credencial
        WHERE id_personal_credencial = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
@@ -705,6 +729,7 @@ export class PersonalService {
   }
 
   async removeCredencial(idPersonal: number, idCred: number, userId: number) {
+    await this.findOne(idPersonal);
     const [antiguo] = await this.dataSource.query(
       `SELECT * FROM cli_personal_credencial
        WHERE id_personal_credencial = ? AND id_personal = ? AND estado_registro = 'ACTIVO'`,
@@ -732,6 +757,7 @@ export class PersonalService {
     const fecha = String(query.fecha || '').trim();
     const idSede = query.id_sede ? Number(query.id_sede) : null;
     if (!fecha) throw new BadRequestException('fecha requerida (YYYY-MM-DD)');
+    if (idSede) await this.unidad.exigirSede(idSede);
 
     const d = new Date(`${fecha}T12:00:00`);
     if (Number.isNaN(d.getTime())) throw new BadRequestException('fecha inválida');
@@ -743,6 +769,11 @@ export class PersonalService {
       whereHorario.push(`id_sede = ?`);
       paramsH.push(idSede);
     }
+    const sedeHorario = this.unidad.sqlPorSede('id_sede');
+    if (sedeHorario.sql) {
+      whereHorario.push(sedeHorario.sql);
+      paramsH.push(...sedeHorario.params);
+    }
     const horarios = await this.dataSource.query(
       `SELECT id_sede, hora_inicio, hora_fin FROM cli_horario_trabajo WHERE ${whereHorario.join(' AND ')}`,
       paramsH,
@@ -753,6 +784,11 @@ export class PersonalService {
     if (idSede) {
       whereEx.push(`(id_sede IS NULL OR id_sede = ?)`);
       paramsEx.push(idSede);
+    }
+    const sedeEx = this.unidad.sqlPorSede('id_sede');
+    if (sedeEx.sql) {
+      whereEx.push(`(id_sede IS NULL OR ${sedeEx.sql})`);
+      paramsEx.push(...sedeEx.params);
     }
     const excepciones = await this.dataSource.query(
       `SELECT id_sede, tipo, hora_inicio, hora_fin, motivo FROM cli_excepcion_horario WHERE ${whereEx.join(' AND ')}`,
@@ -770,6 +806,11 @@ export class PersonalService {
     if (idSede) {
       whereCita.push(`id_sede = ?`);
       paramsC.push(idSede);
+    }
+    const empresaCita = this.unidad.sqlEmpresa('id_unidad', 'id_sede');
+    if (empresaCita.sql) {
+      whereCita.push(empresaCita.sql);
+      paramsC.push(...empresaCita.params);
     }
     const citas = await this.dataSource.query(
       `SELECT id_cita, id_sede, hora_inicio, hora_fin, estado

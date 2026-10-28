@@ -2,12 +2,12 @@
 <div class="sidebar-logo">
   <div class="sidebar-brand">
     @if (!logoError()) {
-      <img src="assets/img/logo.png?v=3" alt="Cirugía Plástica López" class="sidebar-logo-img"
+      <img [src]="marca().logo" [alt]="marca().alt" class="sidebar-logo-img"
            (error)="logoError.set(true)">
     } @else {
       <div class="logo-fallback">
-        <div class="logo-text">CIRUGÍA PLÁSTICA LÓPEZ</div>
-        <div class="logo-sub">Clínica Especializada & Medical Spa</div>
+        <div class="logo-text">{{ marca().titulo }}</div>
+        <div class="logo-sub">{{ marca().subtitulo }}</div>
       </div>
     }
   </div>
@@ -53,6 +53,7 @@
             <a [routerLink]="sub.route"
                [class.is-active]="isExactActive(sub.route)"
                class="menu-sub-item"
+               [class.una-linea]="sub.unaLinea"
                (click)="checkMobileClose()">
               <span class="sub-dot"></span>
               {{ sub.label }}

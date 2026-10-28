@@ -1,6 +1,6 @@
 import { Component, inject, OnInit, ChangeDetectionStrategy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NgSelectModule } from '@ng-select/ng-select';
 
@@ -8,9 +8,11 @@ import { ErpTabsComponent, ErpTab } from 'src/app/shared/components/erp-tabs/erp
 import { FormErrorComponent } from 'src/app/shared/components/form-error/form-error.component';
 import { AlertService } from 'src/app/core/services/ui/alert.service';
 import { PermissionsService } from 'src/app/core/services/seguridad/permissions.service';
+import { UnidadContextService } from 'src/app/core/services/unidad-context.service';
 import { PacientesService } from './pacientes.service';
 import { HistoriaClinicaService } from '../historia-clinica/historia-clinica.service';
 import { AgendaService } from '../agenda/agenda.service';
+import { HistoriaDigitalService } from '../historia-digital/historia-digital.service';
 
 type HistSec = {
   id: string;
@@ -32,9 +34,12 @@ type HistSec = {
 })
 export class PacienteFichaComponent implements OnInit {
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
   private service = inject(PacientesService);
   private hcService = inject(HistoriaClinicaService);
   private agendaService = inject(AgendaService);
+  private hdApi = inject(HistoriaDigitalService);
+  private unidad = inject(UnidadContextService);
   private fb = inject(FormBuilder);
   private alert = inject(AlertService);
   public perms = inject(PermissionsService);
@@ -49,6 +54,8 @@ export class PacienteFichaComponent implements OnInit {
   historiaItems = signal<Record<string, any[]>>({});
   histSec = signal('medidas');
   activeTab = signal('datos');
+  /** Planes HD con sesiones pendientes (Sorela); vacío si 403/error. */
+  sesionesPorProgramar = signal<any[]>([]);
 
   form: FormGroup;
   formMedida: FormGroup;
@@ -126,6 +133,7 @@ export class PacienteFichaComponent implements OnInit {
       sexo: [null],
       telefono: [''],
       telefono_alterno: [''],
+      telefono_whatsapp: [''],
       email: [''],
       direccion: [''],
       distrito: [''],
@@ -254,6 +262,33 @@ export class PacienteFichaComponent implements OnInit {
     this.service.getResumen(id).subscribe({
       next: (res: any) => this.resumen.set(res.data?.data || res.data || {}),
       error: () => this.resumen.set({}),
+    });
+    this.cargarSesionesPorProgramar(id);
+  }
+
+  /** Informativo; 403/error → sin toast ni bloqueo. */
+  private cargarSesionesPorProgramar(id: number) {
+    this.sesionesPorProgramar.set([]);
+    if (!id || !this.esSorela()) return;
+    this.hdApi.sesionesPendientes(id).subscribe({
+      next: (res: any) => {
+        const body = res?.data?.planes ? res.data : res?.data?.data || res?.data || res;
+        this.sesionesPorProgramar.set(Array.isArray(body?.planes) ? body.planes : []);
+      },
+      error: () => this.sesionesPorProgramar.set([]),
+    });
+  }
+
+  esSorela(): boolean {
+    const codigo = this.unidad.membresias().find((m) => m.id_unidad === this.unidad.idUnidad())?.codigo;
+    return String(codigo || '').toUpperCase() === 'SORELA';
+  }
+
+  agendarPlan(p: any) {
+    const id = this.idPaciente();
+    if (!id || !p?.id_hd_paquete) return;
+    this.router.navigate(['/agenda'], {
+      queryParams: { id_paciente: id, id_hd_paquete: p.id_hd_paquete },
     });
   }
 

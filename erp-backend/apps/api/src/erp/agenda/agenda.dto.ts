@@ -93,6 +93,12 @@ export class CreateCitaDto {
   @IsInt()
   id_paciente_paquete?: number | null;
 
+  /** Plan de tratamiento Sorela (cli_hd_paquete); opcional, liga la cita a la siguiente sesión. */
+  @IsOptional()
+  @Transform(toIntOrNull)
+  @IsInt()
+  id_hd_paquete?: number | null;
+
   @IsString()
   @IsNotEmpty()
   fecha_cita!: string;

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import { ConfigService } from '@nestjs/config';
+import { resolverFrontendUrl } from './frontend-url';
 
 @Injectable()
 export class MailService {
@@ -11,7 +12,9 @@ export class MailService {
     private readonly mailerService: MailerService,
     private configService: ConfigService
   ) {
-    this.urlBase = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:4200';
+    this.urlBase = resolverFrontendUrl({
+      configurada: this.configService.get<string>('FRONTEND_URL'),
+    });
   }
 
   // --- PLANTILLAS DINÁMICAS Y DEEP LINKING ---

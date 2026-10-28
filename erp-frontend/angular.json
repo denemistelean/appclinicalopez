@@ -99,24 +99,11 @@
           }
         },
         "test": {
-          "builder": "@angular/build:application",
+          "builder": "@angular/build:unit-test",
           "options": {
-            "outputPath": "dist/frontend-test",
-            "index": "src/index.html",
-            "browser": "src/main.ts",
-            "polyfills": [
-              "zone.js",
-              "@angular/localize/init"
-            ],
+            "buildTarget": "frontend:build:development",
             "tsConfig": "tsconfig.spec.json",
-            "assets": [
-              "src/favicon.ico",
-              "src/assets"
-            ],
-            "styles": [
-              "src/styles.scss"
-            ],
-            "scripts": []
+            "runner": "vitest"
           }
         }
       }

@@ -1,7 +1,13 @@
 export * from './auth.module';
+export * from './jwt-secreto';
 export * from './auth.service';
 export * from './guards/jwt-auth.guard';
 export * from './strategies/jwt.strategy';
+export * from './token-claims';
 // Agregamos las dos nuevas líneas:
 export * from './decorators/require-permissions.decorator';
 export * from './guards/permissions.guard';
+export * from './unidad/unidad-scope.service';
+export * from './unidad/unidad-contexto';
+export * from './unidad/unidad-atribucion';
+export * from './unidad/unidad.interceptor';

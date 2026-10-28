@@ -208,13 +208,14 @@ export class PersonalComponent implements OnInit {
   guardar() {
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const raw = this.form.getRawValue();
-    const idsSede = Array.isArray(raw.ids_sede) ? raw.ids_sede.map(Number).filter(Boolean) : [];
-    let principal = raw.id_sede_principal ? Number(raw.id_sede_principal) : null;
+    const { ids_sede, ...resto } = raw;
+    const idsSede = Array.isArray(ids_sede) ? ids_sede.map(Number).filter(Boolean) : [];
+    let principal = resto.id_sede_principal ? Number(resto.id_sede_principal) : null;
     if (principal && !idsSede.includes(principal)) idsSede.push(principal);
     if (!principal && idsSede.length) principal = idsSede[0];
     this.crud.save({
-      ...raw,
-      ids_especialidad: Array.isArray(raw.ids_especialidad) ? raw.ids_especialidad : [],
+      ...resto,
+      ids_especialidad: Array.isArray(resto.ids_especialidad) ? resto.ids_especialidad : [],
       sedes: idsSede,
       id_sede_principal: principal,
     });

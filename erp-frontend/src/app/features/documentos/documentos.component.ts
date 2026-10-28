@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { NgbModalModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { useCrud } from 'src/app/core/utils/crud.util';
@@ -51,7 +51,6 @@ export class DocumentosComponent implements OnInit {
   tipos = signal<any[]>([]);
   tiposAll = signal<any[]>([]);
   consultas = signal<any[]>([]);
-  raiz = signal('');
   archivoSeleccionado: File | null = null;
   form: FormGroup;
   formTipo: FormGroup;
@@ -78,10 +77,6 @@ export class DocumentosComponent implements OnInit {
   ngOnInit() {
     this.cargarPacientes();
     this.cargarTipos();
-    this.service.getRaiz().subscribe({
-      next: (res: any) => this.raiz.set(res.data?.documentos_root || res.documentos_root || ''),
-      error: () => this.raiz.set(''),
-    });
     this.form.get('id_paciente')?.valueChanges.subscribe((id) => {
       this.consultas.set([]);
       this.form.patchValue({ id_consulta: null }, { emitEvent: false });
@@ -193,14 +188,10 @@ export class DocumentosComponent implements OnInit {
   }
 
   async verArchivo(item: any) {
-    const token = localStorage.getItem('token') || '';
     const url = this.service.archivoUrl(item.id_documento);
     try {
       const blob = await this.http
-        .get(url, {
-          headers: new HttpHeaders({ Authorization: `Bearer ${token}` }),
-          responseType: 'blob',
-        })
+        .get(url, { responseType: 'blob' })
         .toPromise();
       if (!blob) return;
       const obj = URL.createObjectURL(blob);

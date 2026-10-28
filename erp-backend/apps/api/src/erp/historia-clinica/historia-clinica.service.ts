@@ -8,6 +8,7 @@ import { DocumentosService } from '../documentos/documentos.service';
 import { MapaCorporalService } from '../mapa-corporal/mapa-corporal.service';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { AuditoriaService, PdfService, htmlFirmaPie, htmlLogoHeader } from '@app/common';
+import { UnidadScopeService } from '@app/auth';
 import { DataSource, QueryRunner } from 'typeorm';
 import {
   ConsultaDto,
@@ -25,6 +26,7 @@ export class HistoriaClinicaService {
     private readonly pdf: PdfService,
     private readonly documentos: DocumentosService,
     private readonly mapa: MapaCorporalService,
+    private readonly unidad: UnidadScopeService,
   ) {}
 
   private meta(page: number, limit: number, total: number) {
@@ -141,6 +143,24 @@ export class HistoriaClinicaService {
     );
   }
 
+  async crearMedicamento(dto: { nombre?: string }, userId: number) {
+    const nombre = String(dto?.nombre || '').trim().toUpperCase().slice(0, 150);
+    if (nombre.length < 2) throw new BadRequestException('Indique el nombre del medicamento.');
+    const [existe] = await this.db.query(
+      `SELECT id_medicamento, nombre, concentracion, forma
+       FROM cli_medicamento
+       WHERE estado_registro = 'ACTIVO' AND UPPER(nombre) = ?
+       LIMIT 1`,
+      [nombre],
+    );
+    if (existe) return existe;
+    const r = await this.db.query(
+      `INSERT INTO cli_medicamento (nombre, id_usuario_crea) VALUES (?, ?)`,
+      [nombre, userId],
+    );
+    return { id_medicamento: Number(r.insertId), nombre, concentracion: null, forma: null };
+  }
+
   async consultas(q: any) {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 20));
@@ -162,6 +182,12 @@ export class HistoriaClinicaService {
       w.push(`(c.motivo_consulta LIKE ? OR pa.nombres LIKE ? OR pa.apellidos LIKE ?)`);
       const s = `%${q.search}%`;
       p.push(s, s, s);
+    }
+    if (q.id_sede) await this.unidad.exigirSede(Number(q.id_sede));
+    const filtro = this.unidad.sqlEmpresa('c.id_unidad', 'c.id_sede');
+    if (filtro.sql) {
+      w.push(filtro.sql);
+      p.push(...filtro.params);
     }
     const [c] = await this.db.query(
       `SELECT COUNT(*) total FROM cli_consulta c
@@ -208,6 +234,7 @@ export class HistoriaClinicaService {
       [id],
     );
     if (!c) throw new NotFoundException('Consulta no encontrada');
+    await this.unidad.exigirRegistro(c.id_unidad, c.id_sede);
     const diagnosticos = await this.db.query(
       `SELECT * FROM cli_consulta_diagnostico WHERE id_consulta=? AND estado_registro='ACTIVO'`,
       [id],
@@ -351,19 +378,35 @@ export class HistoriaClinicaService {
         throw new BadRequestException('Esta cita de agenda ya tiene una cita clínica');
       }
     }
+    const sede = await this.unidad.exigirSede(Number(d.id_sede), (d as any).id_unidad);
+    if (d.id_cita) {
+      const [cita] = await this.db.query(
+        `SELECT id_unidad, estado FROM cli_cita WHERE id_cita=? AND estado_registro='ACTIVO'`,
+        [d.id_cita],
+      );
+      if (!cita) throw new BadRequestException('La cita no existe');
+      if (String(cita.estado) === 'FINALIZADA') {
+        throw new BadRequestException('La cita ya está finalizada.');
+      }
+      this.unidad.exigirCambio(cita.id_unidad, sede.id_unidad);
+      if (cita.id_unidad == null) {
+        throw new BadRequestException('La cita no tiene empresa asignada');
+      }
+    }
     const qr = this.db.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
     try {
       const r = await qr.query(
         `INSERT INTO cli_consulta
-          (id_paciente,id_sede,id_personal,id_cita,id_plantilla_clinica,fecha_consulta,
+          (id_paciente,id_sede,id_unidad,id_personal,id_cita,id_plantilla_clinica,fecha_consulta,
            motivo_consulta,tiempo_enfermedad,tipo_enfermedad,relato,anamnesis,examen_fisico,
            apreciacion,examen_json,datos_plantilla_json,adjuntos_json,id_usuario_crea)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           d.id_paciente,
           d.id_sede,
+          sede.id_unidad,
           d.id_personal,
           d.id_cita || null,
           d.id_plantilla_clinica || null,
@@ -412,6 +455,28 @@ export class HistoriaClinicaService {
     if (old.estado !== 'BORRADOR') {
       throw new BadRequestException('La consulta finalizada es inmutable');
     }
+    let idUnidad = old.id_unidad == null ? null : Number(old.id_unidad);
+    if (d.id_sede) {
+      const sede = await this.unidad.exigirSede(Number(d.id_sede), (d as any).id_unidad);
+      this.unidad.exigirCambio(old.id_unidad, sede.id_unidad);
+      idUnidad = sede.id_unidad;
+    }
+    const idCitaLigada = Number(d.id_cita || old.id_cita || 0);
+    if (idCitaLigada) {
+      const [cita] = await this.db.query(
+        `SELECT id_unidad, estado FROM cli_cita WHERE id_cita=? AND estado_registro='ACTIVO'`,
+        [idCitaLigada],
+      );
+      if (cita && String(cita.estado) === 'FINALIZADA') {
+        throw new BadRequestException('La cita ya está finalizada.');
+      }
+      if (d.id_cita) {
+        if (!cita || cita.id_unidad == null) {
+          throw new BadRequestException('La cita no tiene empresa asignada');
+        }
+        this.unidad.exigirCambio(idUnidad, Number(cita.id_unidad));
+      }
+    }
     const qr = this.db.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -420,6 +485,7 @@ export class HistoriaClinicaService {
         `UPDATE cli_consulta SET
           id_paciente=COALESCE(?,id_paciente),
           id_sede=COALESCE(?,id_sede),
+          id_unidad=COALESCE(?,id_unidad),
           id_personal=COALESCE(?,id_personal),
           id_cita=COALESCE(?,id_cita),
           id_plantilla_clinica=COALESCE(?,id_plantilla_clinica),
@@ -439,6 +505,7 @@ export class HistoriaClinicaService {
         [
           d.id_paciente ?? null,
           d.id_sede ?? null,
+          idUnidad,
           d.id_personal ?? null,
           d.id_cita ?? null,
           d.id_plantilla_clinica ?? null,

@@ -8,6 +8,7 @@ import { TableProComponent } from 'src/app/shared/components/table-pro/table-pro
 import { FormErrorComponent } from 'src/app/shared/components/form-error/form-error.component';
 import { PermissionsService } from 'src/app/core/services/seguridad/permissions.service';
 import { AlertService } from 'src/app/core/services/ui/alert.service';
+import { SedeContextService } from 'src/app/core/services/sede-context.service';
 import { NotificacionesService } from './notificaciones.service';
 
 @Component({
@@ -21,6 +22,7 @@ export class NotificacionesComponent {
   private fb = inject(FormBuilder);
   private service = inject(NotificacionesService);
   private alert = inject(AlertService);
+  private sedeCtx = inject(SedeContextService);
   public perms = inject(PermissionsService);
   public crud = useCrud<any>(this.service as any, { itemName: 'Notificación' });
   form: FormGroup;
@@ -65,6 +67,15 @@ export class NotificacionesComponent {
 
   guardar() {
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
-    this.crud.save(this.form.getRawValue());
+    const payload = this.form.getRawValue();
+    if (!this.crud.editingId()) {
+      const idSede = this.sedeCtx.idSedeFiltro();
+      if (!idSede) {
+        this.alert.error('Seleccione una sede de la empresa activa.');
+        return;
+      }
+      payload.id_sede = idSede;
+    }
+    this.crud.save(payload);
   }
 }

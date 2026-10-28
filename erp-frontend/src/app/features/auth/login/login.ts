@@ -4,7 +4,9 @@ import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angula
 import { Router } from '@angular/router';
 
 import { AuthService } from 'src/app/core/services/auth.service';
+import { textoPublico } from 'src/app/core/auth/sesion-token';
 import { PermissionsService } from 'src/app/core/services/seguridad/permissions.service';
+import { UnidadContextService } from 'src/app/core/services/unidad-context.service';
 import { AlertService } from 'src/app/core/services/ui/alert.service';
 
 @Component({
@@ -19,6 +21,7 @@ export class Login {
   private authService = inject(AuthService);
   private router = inject(Router);
   private permsService = inject(PermissionsService);
+  private unidad = inject(UnidadContextService);
   private alert = inject(AlertService);
   
   private cdr = inject(ChangeDetectorRef);
@@ -29,9 +32,13 @@ export class Login {
 
   constructor() {
     this.form = this.fb.group({
-      email: ['', [Validators.required]], // Quitamos el Validators.email
+      email: ['', [Validators.required]],
       password: ['', Validators.required]
     });
+    if (sessionStorage.getItem('cli_aviso') === 'sin_confirmar') {
+      sessionStorage.removeItem('cli_aviso');
+      this.errorMsg = 'Se cerró la sesión en este equipo, pero no se pudo confirmar la revocación en el servidor.';
+    }
   }
 
   onSubmit() {
@@ -49,59 +56,66 @@ export class Login {
     };
 
     this.authService.login(payload).subscribe({
-      next: (res: any) => {
-        const tokenReal = res.data?.data?.access_token || res.data?.access_token;
-
-        if (tokenReal) {
-           localStorage.setItem('token', tokenReal);
-           this.verificarAcceso(); 
+      next: () => {
+        if (this.authService.tieneAccess()) {
+          this.verificarAcceso();
         } else {
-           this.errorMsg = 'Error: Respuesta del servidor sin token.';
-           this.cargando = false;
-           this.cdr.detectChanges(); 
+          this.errorMsg = 'La respuesta de acceso está incompleta.';
+          this.cargando = false;
+          this.cdr.detectChanges();
         }
       },
-      error: (err: any) => {
-        console.error(err);
-        const mensajeBackend = err.error?.mensaje || 'Credenciales incorrectas o error de conexión.';
-        
-        this.errorMsg = mensajeBackend;
+      error: (err: { message?: string; status?: number; error?: unknown }) => {
+        this.errorMsg = err?.message === 'respuesta_incompleta'
+          ? 'La respuesta de acceso está incompleta.'
+          : textoPublico(err);
         this.cargando = false;
-        this.cdr.detectChanges(); 
+        this.cdr.detectChanges();
       }
     });
   }
 
   verificarAcceso() {
-    this.permsService.loadPermissions().subscribe({
-      next: (res: any) => {
-        const listaPermisos = res.data?.data?.permisos || res.data?.permisos || res.permisos || [];
-        
-        console.log('🔍 Permisos recibidos en Login:', listaPermisos.length);
-
-        if (listaPermisos.length > 0) {
-          this.router.navigate(['/agenda']);
-        } else {
-          this.rechazarIngreso();
+    this.unidad.cargar().subscribe({
+      next: () => {
+        if (!this.unidad.idUnidad() || !this.unidad.membresias().length) {
+          this.rechazarIngreso('Su usuario no tiene empresa asignada. Pida a un administrador que le asigne unidad y rol.');
+          return;
         }
+        this.cargarPermisos();
       },
-      error: (err) => {
-        console.error('Error verificando permisos', err);
-        this.rechazarIngreso();
-      }
+      error: () =>
+        this.rechazarIngreso('No se pudieron cargar las empresas del usuario. Intente de nuevo o contacte a soporte.'),
     });
   }
 
-  rechazarIngreso() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('usuario');
-    
-    this.alert.toast('Usuario válido, pero SIN PERMISOS en BD.', 'warning');
+  private cargarPermisos() {
+    this.permsService.loadPermissions().subscribe({
+      next: (res: any) => {
+        const listaPermisos = res.data?.data?.permisos || res.data?.permisos || res.permisos || [];
+        if (listaPermisos.length > 0) {
+          this.router.navigate(['/agenda']);
+          return;
+        }
+        this.rechazarIngreso(
+          'Su usuario no tiene permisos en la empresa activa. Revise el rol asignado en esa unidad.',
+        );
+      },
+      error: () =>
+        this.rechazarIngreso(
+          'No se pudieron cargar los permisos. Elija otra empresa o revise el rol asignado.',
+        ),
+    });
+  }
 
+  rechazarIngreso(mensaje?: string) {
+    this.authService.revocarSinSalir();
+    this.unidad.clear();
+    this.alert.toast(mensaje || 'No se pudo completar el ingreso.', 'warning');
     setTimeout(() => {
-      this.errorMsg = 'Su usuario no tiene roles configurados en el sistema.';
-      this.cargando = false; 
-      this.cdr.detectChanges(); 
+      this.errorMsg = mensaje || 'Su usuario no tiene roles configurados en el sistema.';
+      this.cargando = false;
+      this.cdr.detectChanges();
     }, 0);
   }
 }

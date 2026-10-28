@@ -8,7 +8,7 @@ import {
   TemplateRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NgSelectModule } from '@ng-select/ng-select';
@@ -22,15 +22,21 @@ import { PacientesService } from '../pacientes/pacientes.service';
 import { HistoriaClinicaService } from '../historia-clinica/historia-clinica.service';
 import { AgendaService } from '../agenda/agenda.service';
 import { DocumentosService } from '../documentos/documentos.service';
+import { UnidadContextService } from 'src/app/core/services/unidad-context.service';
+import { CONSENTIMIENTOS_LOPEZ } from './consentimientos-lopez';
+import { abrirConsentimientoPdf } from './consentimiento-pdf';
 
-export type TabAtencion = 'resumen' | 'atenciones' | 'archivos' | 'agenda';
+export type TabAtencion = 'resumen' | 'atenciones' | 'archivos' | 'agenda' | 'consentimientos';
 export type FiltroAgendaPac = 'proximas' | 'pasadas' | 'no_realizadas' | 'todas';
 
 type SeccionCfg = {
   key: string;
   recurso: string;
   titulo: string;
+  descripcion: string;
   icon: string;
+  arte: string;
+  tono: 'mint' | 'sky' | 'rose' | 'violet' | 'amber' | 'pink' | 'lime';
   hasNoRefiere: boolean;
   pk: string;
 };
@@ -55,6 +61,8 @@ export class AtencionPacienteComponent implements OnInit {
   private http = inject(HttpClient);
   private alert = inject(AlertService);
   public perms = inject(PermissionsService);
+  private unidad = inject(UnidadContextService);
+  readonly consentimientos = CONSENTIMIENTOS_LOPEZ;
 
   idPaciente = signal(0);
   idCita = signal<number | null>(null);
@@ -68,6 +76,7 @@ export class AtencionPacienteComponent implements OnInit {
   seccionesData = signal<Record<string, any[]>>({});
   noRefiere = signal<Record<string, boolean>>({});
   seccionActiva = signal<SeccionCfg | null>(null);
+  detalleAbierta = signal<string | null>(null);
 
   /** Tab Atenciones */
   citasPaciente = signal<any[]>([]);
@@ -118,19 +127,42 @@ export class AtencionPacienteComponent implements OnInit {
   medTypeahead$ = new Subject<string>();
   medOptions = signal<any[]>([]);
 
-  readonly tabs: { id: TabAtencion; label: string }[] = [
-    { id: 'resumen', label: 'Resumen' },
-    { id: 'atenciones', label: 'Atenciones' },
-    { id: 'archivos', label: 'Archivos' },
-    { id: 'agenda', label: 'Agenda' },
+  readonly tabs: { id: TabAtencion; label: string; icon: string }[] = [
+    { id: 'resumen', label: 'Resumen', icon: 'bi-grid' },
+    { id: 'atenciones', label: 'Atenciones', icon: 'bi-activity' },
+    { id: 'archivos', label: 'Archivos', icon: 'bi-folder2' },
+    { id: 'agenda', label: 'Agenda', icon: 'bi-calendar3' },
+    { id: 'consentimientos', label: 'Consentimientos', icon: 'bi-file-earmark-medical' },
   ];
+
+  pestanas() {
+    if (this.esSorela()) return this.tabs.filter((t) => t.id !== 'consentimientos');
+    return this.tabs;
+  }
+
+  esSorela(): boolean {
+    const codigo = this.unidad.membresias().find((m) => m.id_unidad === this.unidad.idUnidad())?.codigo;
+    return String(codigo || '').toUpperCase() === 'SORELA';
+  }
+
+  async generarConsentimiento(id: string) {
+    const item = this.consentimientos.find((c) => c.id === id);
+    const p = this.paciente();
+    if (!item || !p) return;
+    const paciente = `${p.apellidos || ''}, ${p.nombres || ''}`.replace(/^,\s*/, '').toUpperCase();
+    const documento = `${p.tipo_documento || 'DNI'} ${p.numero_documento || '-'}`.trim();
+    await abrirConsentimientoPdf({ bloques: item.bloques, paciente, documento });
+  }
 
   readonly secciones: SeccionCfg[] = [
     {
       key: 'vitales',
       recurso: 'vitales',
       titulo: 'Funciones Vitales',
+      descripcion: 'Registra y visualiza las funciones vitales del paciente.',
       icon: 'bi-heart-pulse',
+      arte: 'bi-activity',
+      tono: 'mint',
       hasNoRefiere: false,
       pk: 'id_paciente_funcion_vital',
     },
@@ -138,7 +170,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'patologicos',
       recurso: 'antecedentes-patologicos',
       titulo: 'Antecedentes patológicos',
-      icon: 'bi-folder2-open',
+      descripcion: 'Enfermedades previas, diagnósticos y condiciones relevantes.',
+      icon: 'bi-file-earmark-medical',
+      arte: 'bi-clipboard2-pulse',
+      tono: 'sky',
       hasNoRefiere: false,
       pk: 'id_paciente_antecedente_patologico',
     },
@@ -146,7 +181,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'alergias',
       recurso: 'alergias',
       titulo: 'Alergias y RAMs',
+      descripcion: 'Alergias conocidas y reacciones adversas a medicamentos.',
       icon: 'bi-exclamation-triangle',
+      arte: 'bi-capsule',
+      tono: 'rose',
       hasNoRefiere: true,
       pk: 'id_paciente_alergia_ram',
     },
@@ -154,7 +192,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'medidas',
       recurso: 'medidas',
       titulo: 'Medidas',
+      descripcion: 'Registra talla, peso, IMC y otras mediciones antropométricas.',
       icon: 'bi-rulers',
+      arte: 'bi-person',
+      tono: 'violet',
       hasNoRefiere: false,
       pk: 'id_paciente_medida',
     },
@@ -162,7 +203,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'oftalmologicos',
       recurso: 'antecedentes-oftalmologicos',
       titulo: 'Antecedentes Oftalmológicos',
+      descripcion: 'Historial de evaluaciones y condiciones oftalmológicas.',
       icon: 'bi-eye',
+      arte: 'bi-eye',
+      tono: 'amber',
       hasNoRefiere: true,
       pk: 'id_paciente_antecedente_oftalmologico',
     },
@@ -170,7 +214,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'gineco',
       recurso: 'gineco-obstetricos',
       titulo: 'Antecedentes Ginecoobstétricos',
+      descripcion: 'Información ginecológica y obstétrica relevante.',
       icon: 'bi-gender-female',
+      arte: 'bi-gender-female',
+      tono: 'pink',
       hasNoRefiere: true,
       pk: 'id_paciente_gineco_obstetrico',
     },
@@ -178,7 +225,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'familiares',
       recurso: 'antecedentes-familiares',
       titulo: 'Antecedentes Familiares',
+      descripcion: 'Enfermedades hereditarias y antecedentes familiares de importancia.',
       icon: 'bi-people',
+      arte: 'bi-people',
+      tono: 'violet',
       hasNoRefiere: true,
       pk: 'id_paciente_antecedente_familiar',
     },
@@ -186,7 +236,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'medicaciones',
       recurso: 'medicaciones',
       titulo: 'Medicación habitual',
+      descripcion: 'Medicamentos de uso regular y tratamientos actuales.',
       icon: 'bi-capsule',
+      arte: 'bi-capsule',
+      tono: 'sky',
       hasNoRefiere: true,
       pk: 'id_paciente_medicacion_habitual',
     },
@@ -194,7 +247,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'embarazo_actual',
       recurso: 'embarazos',
       titulo: 'Embarazo actual',
-      icon: 'bi-balloon',
+      descripcion: 'Información del embarazo en curso y controles prenatales.',
+      icon: 'bi-person-heart',
+      arte: 'bi-person-heart',
+      tono: 'lime',
       hasNoRefiere: true,
       pk: 'id_paciente_embarazo',
     },
@@ -202,7 +258,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'notas',
       recurso: 'notas-adicionales',
       titulo: 'Notas Adicionales',
+      descripcion: 'Observaciones clínicas que no encajan en las demás secciones.',
       icon: 'bi-sticky',
+      arte: 'bi-journal-text',
+      tono: 'amber',
       hasNoRefiere: true,
       pk: 'id_paciente_nota_adicional',
     },
@@ -210,7 +269,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'personales',
       recurso: 'antecedentes-personales',
       titulo: 'Antecedentes personales',
+      descripcion: 'Hábitos, antecedentes sociales y datos personales de relevancia.',
       icon: 'bi-person-lines-fill',
+      arte: 'bi-person-vcard',
+      tono: 'sky',
       hasNoRefiere: true,
       pk: 'id_paciente_antecedente_personal',
     },
@@ -218,7 +280,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'quirurgicos',
       recurso: 'antecedentes-quirurgicos',
       titulo: 'Antecedentes Quirúrgicos',
+      descripcion: 'Cirugías, procedimientos y hospitalizaciones previas.',
       icon: 'bi-scissors',
+      arte: 'bi-bandaid',
+      tono: 'rose',
       hasNoRefiere: true,
       pk: 'id_paciente_antecedente_quirurgico',
     },
@@ -226,7 +291,10 @@ export class AtencionPacienteComponent implements OnInit {
       key: 'embarazos',
       recurso: 'embarazos',
       titulo: 'Embarazos',
+      descripcion: 'Gestaciones anteriores y su desenlace.',
       icon: 'bi-calendar-heart',
+      arte: 'bi-calendar-heart',
+      tono: 'pink',
       hasNoRefiere: false,
       pk: 'id_paciente_embarazo',
     },
@@ -294,8 +362,27 @@ export class AtencionPacienteComponent implements OnInit {
     let edad = hoy.getFullYear() - fn.getFullYear();
     const m = hoy.getMonth() - fn.getMonth();
     if (m < 0 || (m === 0 && hoy.getDate() < fn.getDate())) edad--;
-    return `${edad} años`;
+    return `${edad} ${edad === 1 ? 'año' : 'años'}`;
   });
+
+  generoLabel(sexo: string): string {
+    const map: Record<string, string> = {
+      M: 'Masculino',
+      F: 'Femenino',
+      X: 'X',
+      NO_ESPECIFICADO: 'No especificado',
+    };
+    return map[String(sexo || '').toUpperCase()] || '';
+  }
+
+  conteoLabel(sec: SeccionCfg): string {
+    const n = this.itemsDe(sec).length;
+    return `${n} ${n === 1 ? 'registro' : 'registros'}`;
+  }
+
+  toggleDetalle(key: string) {
+    this.detalleAbierta.update((abierta) => (abierta === key ? null : key));
+  }
 
   ngOnInit() {
     this.formModal = this.fb.group({});
@@ -337,7 +424,7 @@ export class AtencionPacienteComponent implements OnInit {
       this.idSede.set(q.get('id_sede') ? Number(q.get('id_sede')) : null);
       this.idPersonal.set(q.get('id_personal') ? Number(q.get('id_personal')) : null);
       const tabQ = q.get('tab') as TabAtencion | null;
-      if (tabQ && ['resumen', 'atenciones', 'archivos', 'agenda'].includes(tabQ)) {
+      if (tabQ && ['resumen', 'atenciones', 'archivos', 'agenda', 'consentimientos'].includes(tabQ)) {
         this.tab.set(tabQ);
       }
       if (id) this.cargarTodo(id);
@@ -396,6 +483,8 @@ export class AtencionPacienteComponent implements OnInit {
         this.loading.set(false);
       },
       error: () => {
+        this.seccionesData.set({});
+        this.noRefiere.set({});
         this.loading.set(false);
         this.alert.error('No se pudo cargar el resumen clínico');
       },
@@ -447,14 +536,10 @@ export class AtencionPacienteComponent implements OnInit {
   async verDocumento(item: any) {
     const id = Number(item?.id_documento);
     if (!id) return;
-    const token = localStorage.getItem('token') || '';
     const url = this.documentos.archivoUrl(id);
     try {
       const blob = await firstValueFrom(
-        this.http.get(url, {
-          headers: new HttpHeaders({ Authorization: `Bearer ${token}` }),
-          responseType: 'blob',
-        }),
+        this.http.get(url, { responseType: 'blob' }),
       );
       if (!blob) return;
       const obj = URL.createObjectURL(blob);
@@ -616,6 +701,10 @@ export class AtencionPacienteComponent implements OnInit {
 
   irAtenderDesdeCita(c: any) {
     if (!c) return;
+    if (String(c.estado || '').toUpperCase() === 'FINALIZADA' || String(c.consulta_estado || '').toUpperCase() === 'FINALIZADA') {
+      this.alert.warning('Esta cita ya está finalizada.');
+      return;
+    }
     this.router.navigate(['/historia-clinica'], {
       queryParams: {
         id_cita: c.id_cita,

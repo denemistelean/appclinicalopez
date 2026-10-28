@@ -20,10 +20,10 @@
       <div class="ap-head-main">
         <h1 class="ap-name">{{ nombreFmt() }}</h1>
         <div class="ap-meta">
-          @if (edadLabel()) { <span>{{ edadLabel() }}</span> }
-          @if (paciente()?.sexo) { <span>{{ paciente()?.sexo }}</span> }
+          @if (edadLabel()) { <span><i class="bi bi-cake2"></i> {{ edadLabel() }}</span> }
+          @if (generoLabel(paciente()?.sexo)) { <span><i class="bi bi-person"></i> {{ generoLabel(paciente()?.sexo) }}</span> }
           @if (paciente()?.numero_documento) {
-            <span>{{ paciente()?.tipo_documento || 'DNI' }} {{ paciente()?.numero_documento }}</span>
+            <span><i class="bi bi-person-vcard"></i> {{ paciente()?.tipo_documento || 'DNI' }} {{ paciente()?.numero_documento }}</span>
           }
           @if (paciente()?.telefono || paciente()?.celular) {
             <span><i class="bi bi-telephone"></i> {{ paciente()?.telefono || paciente()?.celular }}</span>
@@ -32,11 +32,11 @@
       </div>
       <div class="ap-head-actions">
         @if (idCita()) {
-          <button type="button" class="btn btn-outline-primary btn-sm" (click)="irAHistoriaClinica()">
+          <button type="button" class="ap-agenda" (click)="irAHistoriaClinica()">
             <i class="bi bi-clipboard2-pulse"></i> Cita clínica
           </button>
         }
-        <button type="button" class="btn btn-soft-neutral btn-sm" (click)="volverAgenda()">
+        <button type="button" class="ap-agenda" (click)="volverAgenda()">
           <i class="bi bi-calendar3"></i> Agenda
         </button>
       </div>
@@ -44,8 +44,9 @@
 
     <!-- Tabs -->
     <div class="ap-tabs">
-      @for (t of tabs; track t.id) {
+      @for (t of pestanas(); track t.id) {
         <button type="button" class="ap-tab" [class.active]="tab() === t.id" (click)="setTab(t.id)">
+          <i class="bi" [class]="t.icon"></i>
           {{ t.label }}
         </button>
       }
@@ -55,52 +56,67 @@
     @if (tab() === 'resumen') {
       <div class="ap-grid">
         @for (sec of secciones; track sec.key) {
-          <section class="ap-card">
-            <div class="ap-card-head">
-              <div class="ap-card-title">
+          <section class="rs-card">
+            <div class="rs-top">
+              <div class="rs-ico" [attr.data-tono]="sec.tono">
                 <i class="bi" [class]="sec.icon"></i>
-                <span>{{ sec.titulo }}</span>
               </div>
+              <div class="rs-copy">
+                <h3>{{ sec.titulo }}</h3>
+                <p>{{ sec.descripcion }}</p>
+              </div>
+              <i class="rs-art bi" [class]="sec.arte" [attr.data-tono]="sec.tono"></i>
             </div>
-            <div class="ap-card-body">
-              @if (noRefiereSec(sec) && !itemsDe(sec).length) {
-                <div class="ap-empty-sec muted">No refiere</div>
-              } @else if (!itemsDe(sec).length) {
-                <div class="ap-empty-sec">Sin registros</div>
-              } @else {
-                <ul class="ap-list">
-                  @for (it of itemsDe(sec); track $index) {
-                    <li>
-                      <div class="ap-list-main">
-                        <span class="ap-list-label">{{ labelItem(sec, it) }}</span>
-                        @if (fechaItem(sec, it); as f) {
-                          <span class="ap-list-date">{{ f }}</span>
-                        }
-                      </div>
-                      @if (perms.hasPermission('eliminar_historia_paciente')) {
-                        <button type="button" class="ap-del" title="Eliminar"
-                                (click)="eliminarItem(sec, it)">
-                          <i class="bi bi-dash-circle"></i>
-                        </button>
-                      }
-                    </li>
-                  }
-                </ul>
-              }
-            </div>
-            <div class="ap-card-foot">
+            <div class="rs-foot">
               @if (perms.hasPermission('crear_historia_paciente')) {
-                <button type="button" class="btn-add" (click)="abrirAgregar(sec, modalSeccion)">
-                  + Agregar
+                <button type="button" class="rs-add" (click)="abrirAgregar(sec, modalSeccion)">
+                  <i class="bi bi-plus-lg"></i> Agregar
                 </button>
               }
-              @if (sec.hasNoRefiere && perms.hasPermission('actualizar_historia_paciente')) {
-                <button type="button" class="btn-noref" (click)="marcarNoRefiere(sec)"
-                        [disabled]="noRefiereSec(sec) && !itemsDe(sec).length">
+              <span class="rs-estado">
+                @if (noRefiereSec(sec) && !itemsDe(sec).length) {
                   <i class="bi bi-slash-circle"></i> No refiere
-                </button>
-              }
+                } @else {
+                  {{ conteoLabel(sec) }}
+                }
+              </span>
+              <button type="button" class="rs-chev" [class.open]="detalleAbierta() === sec.key"
+                      [attr.aria-expanded]="detalleAbierta() === sec.key"
+                      (click)="toggleDetalle(sec.key)" aria-label="Ver registros">
+                <i class="bi bi-chevron-right"></i>
+              </button>
             </div>
+            @if (detalleAbierta() === sec.key) {
+              <div class="rs-detalle">
+                @if (!itemsDe(sec).length) {
+                  <div class="ap-empty-sec">Sin registros</div>
+                } @else {
+                  <ul class="ap-list">
+                    @for (it of itemsDe(sec); track $index) {
+                      <li>
+                        <div class="ap-list-main">
+                          <span class="ap-list-label">{{ labelItem(sec, it) }}</span>
+                          @if (fechaItem(sec, it); as f) {
+                            <span class="ap-list-date">{{ f }}</span>
+                          }
+                        </div>
+                        @if (perms.hasPermission('eliminar_historia_paciente')) {
+                          <button type="button" class="ap-del" title="Eliminar"
+                                  (click)="eliminarItem(sec, it)">
+                            <i class="bi bi-dash-circle"></i>
+                          </button>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+                @if (sec.hasNoRefiere && perms.hasPermission('actualizar_historia_paciente') && !(noRefiereSec(sec) && !itemsDe(sec).length)) {
+                  <button type="button" class="rs-noref" (click)="marcarNoRefiere(sec)">
+                    <i class="bi bi-slash-circle"></i> No refiere
+                  </button>
+                }
+              </div>
+            }
           </section>
         }
       </div>
@@ -147,7 +163,7 @@
                 <span class="aten-badge" [class.ok]="estadoConsultaLabel(citaSel()) === 'Completada'">
                   {{ estadoConsultaLabel(citaSel()) }}
                 </span>
-                @if (!citaSel()?.id_consulta || citaSel()?.consulta_estado === 'BORRADOR') {
+                @if (citaSel()?.estado !== 'FINALIZADA' && (!citaSel()?.id_consulta || citaSel()?.consulta_estado === 'BORRADOR')) {
                   <button type="button" class="btn btn-primary btn-sm" (click)="irAtenderDesdeCita(citaSel())">
                     Atender
                   </button>
@@ -237,9 +253,11 @@
               } @else {
                 <div class="ap-placeholder">
                   <p>Esta cita aún no tiene atención registrada.</p>
-                  <button type="button" class="btn btn-primary" (click)="irAtenderDesdeCita(citaSel())">
-                    Iniciar atención
-                  </button>
+                  @if (citaSel()?.estado !== 'FINALIZADA') {
+                    <button type="button" class="btn btn-primary" (click)="irAtenderDesdeCita(citaSel())">
+                      Iniciar atención
+                    </button>
+                  }
                 </div>
               }
             } @else {
@@ -398,6 +416,22 @@
             </div>
           }
         </section>
+      </div>
+    }
+
+    @if (tab() === 'consentimientos') {
+      <div class="cons-lista">
+        @for (c of consentimientos; track c.id) {
+          <article class="rs-card cons-item">
+            <div>
+              <h3>{{ c.nombre }}</h3>
+              <p>Consentimiento informado para la intervención.</p>
+            </div>
+            <button type="button" class="rs-add" (click)="generarConsentimiento(c.id)">
+              Generar consentimiento
+            </button>
+          </article>
+        }
       </div>
     }
   }

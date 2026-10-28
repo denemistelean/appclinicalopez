@@ -6,6 +6,7 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { AuditoriaService } from '@app/common';
+import { UnidadScopeService } from '@app/auth';
 import {
   CreateEquipoDto,
   CreateSalaDto,
@@ -21,6 +22,7 @@ export class SedesService {
   constructor(
     @InjectDataSource('APP_DB_CONN') private readonly dataSource: DataSource,
     private readonly auditoriaService: AuditoriaService,
+    private readonly unidad: UnidadScopeService,
   ) {}
 
   private pageMeta(page: number, limit: number, total: number) {
@@ -44,6 +46,11 @@ export class SedesService {
     if (estado) {
       where.push(`s.estado = ?`);
       params.push(estado);
+    }
+    const filtro = this.unidad.sqlEmpresa('s.id_unidad');
+    if (filtro.sql) {
+      where.push(filtro.sql);
+      params.push(...filtro.params);
     }
 
     const sqlWhere = where.join(' AND ');
@@ -70,16 +77,22 @@ export class SedesService {
       [id],
     );
     if (!row) throw new NotFoundException('Sede no encontrada');
+    await this.unidad.exigirRegistro(row.id_unidad);
     return row;
   }
 
   async create(dto: CreateSedeDto, userId: number) {
+    const idUnidad = this.unidad.empresaActiva();
+    if (!idUnidad) {
+      throw new BadRequestException('No se puede crear una sede sin empresa activa');
+    }
     const nombre = String(dto.nombre || '').trim().toUpperCase();
     const res = await this.dataSource.query(
       `INSERT INTO cli_sede
         (nombre, razon_social, direccion, ciudad, distrito, telefono, email_contacto,
-         horario_apertura, horario_cierre, dias_atencion, logo_url, estado, libre_disposicion, id_usuario_crea)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         horario_apertura, horario_cierre, dias_atencion, logo_url, estado, libre_disposicion,
+         id_unidad, id_usuario_crea)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         nombre,
         dto.razon_social?.trim() || null,
@@ -94,6 +107,7 @@ export class SedesService {
         dto.logo_url || null,
         dto.estado || 'ACTIVA',
         dto.libre_disposicion ? 1 : 0,
+        idUnidad,
         userId,
       ],
     );
@@ -177,12 +191,28 @@ export class SedesService {
     return { id, message: 'Sala creada' };
   }
 
-  async updateSala(idSala: number, dto: UpdateSalaDto, userId: number) {
-    const [antiguo] = await this.dataSource.query(
+  private async salaDeEmpresa(idSala: number) {
+    const [row] = await this.dataSource.query(
       `SELECT * FROM cli_sala WHERE id_sala = ? AND estado_registro = 'ACTIVO'`,
       [idSala],
     );
-    if (!antiguo) throw new NotFoundException('Sala no encontrada');
+    if (!row) throw new NotFoundException('Sala no encontrada');
+    await this.unidad.exigirSede(Number(row.id_sede));
+    return row;
+  }
+
+  private async equipoDeEmpresa(idEquipo: number) {
+    const [row] = await this.dataSource.query(
+      `SELECT * FROM cli_equipo WHERE id_equipo = ? AND estado_registro = 'ACTIVO'`,
+      [idEquipo],
+    );
+    if (!row) throw new NotFoundException('Equipo no encontrado');
+    await this.unidad.exigirSede(Number(row.id_sede));
+    return row;
+  }
+
+  async updateSala(idSala: number, dto: UpdateSalaDto, userId: number) {
+    const antiguo = await this.salaDeEmpresa(idSala);
     const res = await this.dataSource.query(
       `UPDATE cli_sala SET
         nombre = COALESCE(?, nombre),
@@ -204,11 +234,7 @@ export class SedesService {
   }
 
   async removeSala(idSala: number, userId: number) {
-    const [antiguo] = await this.dataSource.query(
-      `SELECT * FROM cli_sala WHERE id_sala = ? AND estado_registro = 'ACTIVO'`,
-      [idSala],
-    );
-    if (!antiguo) throw new NotFoundException('Sala no encontrada');
+    const antiguo = await this.salaDeEmpresa(idSala);
     await this.dataSource.query(
       `UPDATE cli_sala SET estado_registro = 'ELIMINADO', id_usuario_mod = ? WHERE id_sala = ? AND estado_registro = 'ACTIVO'`,
       [userId, idSala],
@@ -254,11 +280,7 @@ export class SedesService {
   }
 
   async updateEquipo(idEquipo: number, dto: UpdateEquipoDto, userId: number) {
-    const [antiguo] = await this.dataSource.query(
-      `SELECT * FROM cli_equipo WHERE id_equipo = ? AND estado_registro = 'ACTIVO'`,
-      [idEquipo],
-    );
-    if (!antiguo) throw new NotFoundException('Equipo no encontrado');
+    const antiguo = await this.equipoDeEmpresa(idEquipo);
     await this.dataSource.query(
       `UPDATE cli_equipo SET
         id_tipo_equipo = COALESCE(?, id_tipo_equipo),
@@ -285,11 +307,7 @@ export class SedesService {
   }
 
   async removeEquipo(idEquipo: number, userId: number) {
-    const [antiguo] = await this.dataSource.query(
-      `SELECT * FROM cli_equipo WHERE id_equipo = ? AND estado_registro = 'ACTIVO'`,
-      [idEquipo],
-    );
-    if (!antiguo) throw new NotFoundException('Equipo no encontrado');
+    const antiguo = await this.equipoDeEmpresa(idEquipo);
     await this.dataSource.query(
       `UPDATE cli_equipo SET estado_registro = 'ELIMINADO', id_usuario_mod = ?
        WHERE id_equipo = ? AND estado_registro = 'ACTIVO'`,
@@ -300,11 +318,7 @@ export class SedesService {
   }
 
   async mantenimiento(idEquipo: number, dto: MantenimientoEquipoDto, userId: number) {
-    const [antiguo] = await this.dataSource.query(
-      `SELECT * FROM cli_equipo WHERE id_equipo = ? AND estado_registro = 'ACTIVO'`,
-      [idEquipo],
-    );
-    if (!antiguo) throw new NotFoundException('Equipo no encontrado');
+    const antiguo = await this.equipoDeEmpresa(idEquipo);
     if (!dto.fecha_ultimo_mantenimiento && !dto.proximo_mantenimiento && !dto.estado) {
       throw new BadRequestException('Indique datos de mantenimiento');
     }

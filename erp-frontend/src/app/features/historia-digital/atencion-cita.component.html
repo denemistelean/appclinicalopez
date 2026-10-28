@@ -1,0 +1,376 @@
+<div class="hd-wrap at-wrap">
+  <a class="hd-back" routerLink="/agenda"><i class="bi bi-arrow-left"></i> Agenda</a>
+
+  @if (loading()) {
+    <div class="hd-card">Cargando atención...</div>
+  } @else if (ficha()) {
+    <header class="at-head">
+      <div class="at-avatar">{{ iniciales() }}</div>
+      <div class="at-id">
+        <div class="at-kicker">Atención de cita</div>
+        <h1>{{ nombrePaciente() }}</h1>
+        @if (documentoPaciente()) {
+          <div class="at-doc"><i class="bi bi-person-vcard"></i> {{ documentoPaciente() }}</div>
+        }
+      </div>
+      <div class="at-facts">
+        <article>
+          <i class="bi bi-calendar3"></i>
+          <div>
+            <span>Fecha</span>
+            <strong>{{ fechaCita() }}</strong>
+          </div>
+        </article>
+        <article>
+          <i class="bi bi-clock"></i>
+          <div>
+            <span>Hora</span>
+            <strong>{{ ficha().cita.hora || '—' }}</strong>
+          </div>
+        </article>
+        <article>
+          <i class="bi bi-person-badge"></i>
+          <div>
+            <span>Cosmiatra</span>
+            <strong>{{ ficha().cita.personal || 'Sin asignar' }}</strong>
+          </div>
+        </article>
+      </div>
+      <span class="at-estado" [class.cerrada]="cerrada()">{{ estadoLabel() }}</span>
+    </header>
+
+    @if (ficha().atencion?.registrado_por) {
+      <p class="at-registro">Registró {{ ficha().atencion.registrado_por }}. La cosmiatra de la cita es quien atendió.</p>
+    }
+
+    <div class="at-tabs">
+      @for (p of pestanas; track p.id) {
+        <button type="button" class="at-tab" [class.active]="tab() === p.id" (click)="tab.set(p.id)">
+          <i class="bi" [class]="p.icon"></i>
+          {{ p.label }}
+        </button>
+      }
+    </div>
+
+    <form [formGroup]="form">
+      @if (tab() === 'sesion') {
+        <section class="hd-card">
+          <div class="hd-section-head"><h5>Sesión</h5></div>
+          @if (avisoPlanDistinto()) {
+            <p class="hd-note text-warning mb-2">
+              Esta cita estaba ligada a otro plan; al finalizar se actualizará el vínculo.
+            </p>
+          }
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Servicio o paquete</label>
+              <ng-select class="ng-select-sm" [items]="ficha().catalogo || []" bindLabel="nombre" bindValue="id_item" groupBy="grupo"
+                         formControlName="id_item" [searchable]="true" [clearable]="true"
+                         placeholder="Buscar servicio o paquete" appendTo="body" notFoundText="Sin resultados">
+                <ng-template ng-label-tmp let-item="item">{{ etiquetaItem(item) }}</ng-template>
+                <ng-template ng-option-tmp let-item="item">{{ etiquetaItem(item) }}</ng-template>
+              </ng-select>
+            </div>
+            @if (componentes().length) {
+              <div class="col-md-6">
+                <label class="form-label">Componente <span class="text-muted">(opcional)</span></label>
+                <ng-select class="ng-select-sm" [items]="componentes()" bindLabel="nombre" bindValue="id_servicio"
+                           formControlName="id_servicio" [searchable]="true" [clearable]="true"
+                           placeholder="Opcional" appendTo="body" notFoundText="Sin componentes">
+                  <ng-template ng-label-tmp let-item="item">{{ item.nombre }} · {{ item.cantidad }} sesiones</ng-template>
+                  <ng-template ng-option-tmp let-item="item">{{ item.nombre }} · {{ item.cantidad }} sesiones</ng-template>
+                </ng-select>
+              </div>
+            }
+            @if (itemEsPaquete() && !estaCitaEsSesion()) {
+              <div class="col-12">
+                <label class="at-check">
+                  <input type="checkbox" [checked]="enEstaCita()" (change)="enEstaCita.set($any($event.target).checked)">
+                  Esta cita es una sesión del plan (se descuenta al finalizar)
+                </label>
+                <p class="hd-note mb-0">
+                  @if (enEstaCita()) {
+                    Al finalizar se descontará 1 sesión del plan elegido.
+                  } @else {
+                    Sin marcar, puede finalizar la atención clínica sin descontar sesión del plan.
+                  }
+                </p>
+              </div>
+            } @else if (itemEsPaquete() && estaCitaEsSesion()) {
+              <div class="col-12">
+                <p class="hd-note mb-0">Esta cita ya está ligada al plan: al finalizar se descontará 1 sesión.</p>
+              </div>
+            }
+            <div class="col-12">
+              <label class="form-label">Anamnesis</label>
+              <textarea class="form-control" rows="5" formControlName="anamnesis"></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Zona</label>
+              <input class="form-control" formControlName="zona">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Lado</label>
+              <ng-select class="ng-select-sm" [items]="lados" bindLabel="nombre" bindValue="id"
+                         formControlName="lado" [searchable]="true" [clearable]="true"
+                         placeholder="Lado" appendTo="body"></ng-select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Tecnologías usadas</label>
+              <ng-select class="ng-select-sm" [items]="ficha().tecnologias || []" bindLabel="nombre" bindValue="id_tecnologia"
+                         formControlName="tecnologias" [multiple]="true" [searchable]="true" [closeOnSelect]="false"
+                         placeholder="Puede elegir varias" appendTo="body" notFoundText="Sin tecnologías"></ng-select>
+              <p class="hd-note">Varias tecnologías en la misma atención cuentan como una sola sesión.</p>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Parámetros</label>
+              <textarea class="form-control" rows="3" formControlName="parametros"></textarea>
+            </div>
+          </div>
+        </section>
+      }
+
+      @if (tab() === 'evolucion') {
+        <section class="hd-card">
+          <div class="hd-section-head"><h5>Evolución</h5></div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Evolución</label>
+              <textarea class="form-control" rows="4" formControlName="evolucion"></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Incidencias</label>
+              <textarea class="form-control" rows="4" formControlName="incidencias"></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Indicaciones</label>
+              <textarea class="form-control" rows="4" formControlName="indicaciones"></textarea>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Próxima revisión</label>
+              <input type="date" class="form-control" formControlName="proxima_revision">
+            </div>
+          </div>
+        </section>
+      }
+
+      @if (tab() === 'medidas') {
+        <section class="hd-card">
+          <div class="hd-section-head"><h5>Medidas</h5></div>
+          <div class="row g-2">
+            <div class="col-md-3">
+              <label class="form-label">Fecha</label>
+              <input type="date" class="form-control" formControlName="medida_fecha">
+            </div>
+            @for (m of medidas; track m.id) {
+              <div class="col-6 col-md-3">
+                <label class="form-label">{{ m.nombre }}</label>
+                <input type="number" class="form-control" [formControlName]="m.id" step="0.01">
+              </div>
+            }
+            <div class="col-12">
+              <label class="form-label">Observaciones de la medición</label>
+              <input class="form-control" formControlName="medida_obs">
+            </div>
+          </div>
+          @if (ficha().medidas?.length) {
+            <p class="hd-note">Tomas anteriores, de la más reciente a la más antigua.</p>
+            @for (t of ficha().medidas; track t.id_medida) {
+              <div class="hd-sub">{{ t.fecha }} · peso {{ t.peso ?? '—' }} · cintura {{ t.cintura ?? '—' }} · cadera {{ t.cadera ?? '—' }}</div>
+            }
+          }
+        </section>
+      }
+    </form>
+
+    @if (tab() === 'sesion') {
+      <section class="hd-card" [formGroup]="formCita">
+        <div class="hd-section-head"><h5>Programar cita</h5></div>
+        @if (!estaCitaEsSesion()) {
+          <p class="hd-note">
+            @if (enEstaCita()) {
+              Esta atención cuenta como sesión del plan. La cita de abajo será la siguiente.
+            } @else {
+              La cita de abajo será la primera sesión del plan (esta atención no descuenta si no marcó el check arriba).
+            }
+          </p>
+        } @else {
+          <p class="hd-note">Esta cita ya es una sesión de lo elegido. Puede programar la siguiente.</p>
+        }
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Fecha</label>
+            <input type="date" class="form-control" formControlName="fecha">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Hora</label>
+            <input type="time" class="form-control" formControlName="hora_inicio">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Duración</label>
+            <ng-select class="ng-select-sm" [items]="duraciones" bindLabel="nombre" bindValue="id"
+                       formControlName="duracion_minutos" [searchable]="true" [clearable]="false" appendTo="body"></ng-select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Cosmiatra</label>
+            <ng-select class="ng-select-sm" [items]="ficha().personal || []" bindValue="id_personal"
+                       formControlName="id_personal" [searchable]="true" placeholder="Buscar" appendTo="body"
+                       notFoundText="Sin personal">
+              <ng-template ng-label-tmp let-item="item">{{ etiquetaPersonal(item) }}</ng-template>
+              <ng-template ng-option-tmp let-item="item">{{ etiquetaPersonal(item) }}</ng-template>
+            </ng-select>
+          </div>
+        </div>
+        @if (perms.hasPermission('actualizar_paciente')) {
+          <div class="hd-actions">
+            <button type="button" class="hd-save" [disabled]="programando()" (click)="programar()">
+              {{ etiquetaProgramar() }}
+            </button>
+          </div>
+        }
+        @for (s of sesionesDelItem(); track s.id_cita) {
+          <article class="hd-item">
+            <div>
+              <strong>Sesión {{ s.numero_sesion }}</strong>
+              @if (s.id_cita === idCita) { <span class="hd-pill">Esta cita</span> }
+              <div class="hd-sub">{{ s.fecha }} {{ s.hora }} · {{ s.personal || 'Sin cosmiatra' }} · {{ s.estado }}</div>
+            </div>
+          </article>
+        }
+      </section>
+    }
+
+    @if (tab() === 'mapa') {
+      <section class="hd-card">
+        <div class="hd-section-head"><h5>Mapa corporal</h5></div>
+        <p class="hd-note">Las marcas quedan en esta cita. Las de sesiones anteriores siguen en el mismo cuerpo.</p>
+        <app-mapa-corporal
+          [embedded]="true"
+          [idPaciente]="ficha().paciente.id_paciente"
+          [idCita]="idCita"
+          [procedimientosItems]="tecnologiasMapa()"
+          [soloLectura]="cerrada()"
+          etiquetaProcedimiento="Tecnología">
+        </app-mapa-corporal>
+      </section>
+    }
+
+    @if (tab() === 'cierre') {
+      @if (puedeRestituir() && perms.hasPermission('actualizar_paciente')) {
+        <section class="hd-card">
+          <div class="hd-section-head"><h5>Restituir sesión</h5></div>
+          <p class="hd-note">Devuelve la sesión descontada. La anamnesis y las marcas no se borran.</p>
+          <div class="row g-2 align-items-end">
+            <div class="col-md-8">
+              <label class="form-label">Motivo</label>
+              <input class="form-control" [value]="motivoRestitucion()" (input)="motivoRestitucion.set($any($event.target).value)">
+            </div>
+            <div class="col-md-4">
+              <button type="button" class="hd-save w-100" [disabled]="guardando()" (click)="restituir()">Restituir sesión</button>
+            </div>
+          </div>
+        </section>
+      }
+      @if (ficha().movimientos?.length) {
+        <section class="hd-card">
+          <div class="hd-section-head"><h5>Movimientos de la sesión</h5></div>
+          @for (m of ficha().movimientos; track m.fecha + m.tipo) {
+            <article class="hd-item">
+              <div>
+                <strong>{{ m.tipo === 'RESTITUCION' ? 'Restitución' : 'Descuento' }}</strong>
+                <div class="hd-sub">{{ m.fecha }} · {{ m.usuario }} · {{ m.motivo }}</div>
+              </div>
+            </article>
+          }
+        </section>
+      } @else if (!puedeRestituir()) {
+        <section class="hd-card">
+          <p class="hd-note mb-0">Si marcó que esta cita es sesión del plan, al finalizar se descuenta 1 sesión. Puede guardar el borrador desde cualquier pestaña.</p>
+        </section>
+      }
+    }
+
+    @if (perms.hasPermission('actualizar_paciente') && !cerrada()) {
+      <div class="at-footer">
+        <button type="button" class="hd-del" [disabled]="guardando()" (click)="guardar()">Guardar borrador</button>
+        <button type="button" class="hd-save" [disabled]="guardando()" (click)="finalizar()">Finalizar atención</button>
+      </div>
+    }
+  }
+
+  @if (modalPago()) {
+    <div class="at-modal-backdrop" (click)="cerrarModalPago(true)">
+      <div class="at-modal" (click)="$event.stopPropagation()" [formGroup]="formPago">
+        <div class="hd-section-head">
+          <h5>Pago / adelanto</h5>
+          <button type="button" class="hd-del" (click)="cerrarModalPago(true)">Cerrar</button>
+        </div>
+        <p class="hd-note">El monto no puede superar el saldo del plan.</p>
+        @if (perms.hasPermission('administrar_configuracion_finanzas')) {
+          <label class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" [checked]="requiereComprobante()"
+                   (change)="toggleRequiereComprobante($event)">
+            <span class="form-check-label">
+              Requerir comprobante al cobrar
+              <span class="hd-sub d-block">Si está activo, tipo y número son obligatorios.</span>
+            </span>
+          </label>
+        }
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Plan</label>
+            <ng-select class="ng-select-sm" [items]="paquetesCobrables()" bindValue="id_hd_paquete"
+                       formControlName="id_hd_paquete" [searchable]="true" appendTo="body"
+                       (change)="formPago.patchValue({ monto: saldoPlanPago() || null, tipo_pago: null })">
+              <ng-template ng-label-tmp let-item="item">
+                {{ item.nombre }} · saldo {{ item.saldo | number:'1.2-2' }}
+              </ng-template>
+              <ng-template ng-option-tmp let-item="item">
+                {{ item.nombre }} · saldo {{ item.saldo | number:'1.2-2' }}
+              </ng-template>
+            </ng-select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Monto (máx. {{ saldoPlanPago() | number:'1.2-2' }})</label>
+            <input type="number" class="form-control" formControlName="monto" min="0.01" step="0.01"
+                   [attr.max]="saldoPlanPago()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Medio</label>
+            <ng-select class="ng-select-sm" [items]="metodosPago" bindLabel="nombre" bindValue="id"
+                       formControlName="metodo_pago" [clearable]="false" appendTo="body"></ng-select>
+          </div>
+          @if (paquetePagoSel(); as sel) {
+            <div class="col-12">
+              <label class="form-label">Tipo de pago</label>
+              <ng-select class="ng-select-sm" [items]="opcionesTipoPagoModal()" bindLabel="nombre" bindValue="id"
+                         formControlName="tipo_pago" [clearable]="true" placeholder="Automático según monto"
+                         appendTo="body"></ng-select>
+              <small class="hd-sub">Total {{ sel.precio_acordado | number:'1.2-2' }} · Pagado {{ sel.pagado | number:'1.2-2' }} · Saldo {{ sel.saldo | number:'1.2-2' }}</small>
+            </div>
+          }
+          <div class="col-md-6">
+            <label class="form-label">Tipo comprobante</label>
+            <input class="form-control" formControlName="comprobante_tipo"
+                   [placeholder]="requiereComprobante() ? 'Obligatorio' : 'Opcional'">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Nº comprobante</label>
+            <input class="form-control" formControlName="comprobante_numero"
+                   [placeholder]="requiereComprobante() ? 'Obligatorio' : 'Opcional'">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Concepto</label>
+            <input class="form-control" formControlName="concepto">
+          </div>
+        </div>
+        <div class="hd-actions mt-3">
+          <button type="button" class="hd-del" (click)="cerrarModalPago(true)">Ahora no</button>
+          <button type="button" class="hd-save" [disabled]="registrandoPago()" (click)="registrarPagoModal()">
+            Registrar pago
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

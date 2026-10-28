@@ -1,36 +1,56 @@
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { lstatSync, readFileSync } from 'fs';
+import { isAbsolute, join, relative } from 'path';
+import { buscarRaizAplicacion } from './uploads-root';
 
 /** Firma institucional para pie de PDFs clínicos */
 export const FIRMA_DRA = {
-  nombre: 'Dra. Soraya Lopez',
-  especialidad: 'Cirugia Plastica',
+  nombre: 'Dra. Soraya López',
+  especialidad: 'Cirugía Plástica',
   credenciales: 'CMP 41034 · RNE 19238',
 };
 
-const LOGO_CANDIDATES = [
-  join(process.cwd(), 'assets', 'branding', 'logo-clinica-lopez.png'),
-  join(process.cwd(), 'erp-backend', 'assets', 'branding', 'logo-clinica-lopez.png'),
-  join(__dirname, '..', '..', '..', 'assets', 'branding', 'logo-clinica-lopez.png'),
-];
+/**
+ * Logo dentro de la raíz Node identificada por package.json.
+ * No usa el directorio de trabajo ni sube una cantidad fija de niveles:
+ * con main.js junto a app.js, tres `..` saldrían de esa raíz.
+ */
+export function rutaLogoClinica(directorioModulo: string): string | null {
+  let raiz: string;
+  try {
+    raiz = buscarRaizAplicacion(directorioModulo);
+  } catch {
+    return null;
+  }
+  const ruta = join(raiz, 'assets', 'branding', 'logo-clinica-lopez.png');
+  const rel = relative(raiz, ruta);
+  if (rel.startsWith('..') || isAbsolute(rel)) return null;
+  try {
+    const estado = lstatSync(ruta);
+    if (estado.isSymbolicLink() || !estado.isFile()) return null;
+  } catch {
+    return null;
+  }
+  return ruta;
+}
 
 let cachedLogoDataUri: string | null | undefined;
 
 /** Data URI del logo institucional (cacheado). */
 export function logoClinicaDataUri(): string | null {
   if (cachedLogoDataUri !== undefined) return cachedLogoDataUri;
-  for (const p of LOGO_CANDIDATES) {
-    try {
-      if (!existsSync(p)) continue;
-      const buf = readFileSync(p);
-      cachedLogoDataUri = `data:image/png;base64,${buf.toString('base64')}`;
-      return cachedLogoDataUri;
-    } catch {
-      /* siguiente candidata */
-    }
+  const ruta = rutaLogoClinica(__dirname);
+  if (!ruta) {
+    cachedLogoDataUri = null;
+    return null;
   }
-  cachedLogoDataUri = null;
-  return null;
+  try {
+    const buf = readFileSync(ruta);
+    cachedLogoDataUri = `data:image/png;base64,${buf.toString('base64')}`;
+    return cachedLogoDataUri;
+  } catch {
+    cachedLogoDataUri = null;
+    return null;
+  }
 }
 
 /** Bloque HTML de cabecera con logo (para documentos clínicos). */

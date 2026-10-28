@@ -19,6 +19,30 @@
     </div>
   </div>
 
+  @if (sesionesPorProgramar().length) {
+    <div class="card-pro p-3 p-md-4 mb-3">
+      <h5 class="fw-bold text-erp mb-1">Sesiones por programar</h5>
+      <p class="text-muted-erp small mb-3">
+        Planes con sesiones pendientes. “Sugerida desde” = última sesión + intervalo del catálogo (solo orientación; no bloquea).
+      </p>
+      @for (p of sesionesPorProgramar(); track p.id_hd_paquete) {
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2 pb-2 border-bottom">
+          <div class="flex-grow-1">
+            <strong>{{ p.nombre }}</strong>
+            <div class="text-muted-erp small">
+              Sesión {{ p.numero_siguiente_sesion }} de {{ p.sesiones_total }}
+              @if (p.fecha_sugerida_desde) { · sugerida desde {{ p.fecha_sugerida_desde }} }
+              @if (p.id_cita_siguiente) { · ya tiene cita vigente }
+            </div>
+          </div>
+          @if (perms.hasPermission('crear_cita') || perms.hasPermission('actualizar_paciente')) {
+            <button type="button" class="btn btn-sm btn-primary" (click)="agendarPlan(p)">Agendar</button>
+          }
+        </div>
+      }
+    </div>
+  }
+
   <div class="card-pro p-3 p-md-4">
     <app-erp-tabs [tabs]="tabs" [activeTab]="activeTab()" (tabChange)="onTabChange($event)"></app-erp-tabs>
 
@@ -59,6 +83,11 @@
         <div class="col-md-3">
           <label class="form-label">Teléfono alterno</label>
           <input type="text" class="form-control" formControlName="telefono_alterno">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Nro. WhatsApp</label>
+          <input type="text" class="form-control" formControlName="telefono_whatsapp"
+                 placeholder="Ej. 987654321" inputmode="tel">
         </div>
         <div class="col-md-4">
           <label class="form-label">Email</label>

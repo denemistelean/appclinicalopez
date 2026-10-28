@@ -1,7 +1,7 @@
 <div class="container-fluid p-3 p-md-4 mx-auto" style="max-width: var(--erp-max-width);">
   <div class="mb-3">
     <h1 class="h4 fw-bold text-erp mb-1">Dashboard</h1>
-    <p class="text-muted-erp mb-0">Base del sistema Clínica López — listo para módulos de dominio</p>
+    <p class="text-muted-erp mb-0">Resumen operativo · citas de la semana y recordatorios WhatsApp</p>
   </div>
 
   @if (loading()) {
@@ -9,7 +9,7 @@
       <span class="spinner-border spinner-border-sm me-2"></span> Cargando...
     </div>
   } @else {
-    <div class="row g-3">
+    <div class="row g-3 mb-3">
       <div class="col-6 col-md-4">
         <div class="card-pro p-3">
           <div class="text-muted-erp text-xs-erp">Usuarios activos</div>
@@ -18,15 +18,146 @@
       </div>
       <div class="col-6 col-md-4">
         <div class="card-pro p-3">
-          <div class="text-muted-erp text-xs-erp">Roles</div>
-          <div class="fs-4 fw-bold text-erp">{{ indicadores().roles || 0 }}</div>
+          <div class="text-muted-erp text-xs-erp">Citas esta semana</div>
+          <div class="fs-4 fw-bold text-erp">{{ citasSemana().length }}</div>
         </div>
       </div>
       <div class="col-6 col-md-4">
         <div class="card-pro p-3">
-          <div class="text-muted-erp text-xs-erp">Módulos</div>
-          <div class="fs-4 fw-bold text-erp">{{ indicadores().modulos || 0 }}</div>
+          <div class="text-muted-erp text-xs-erp">Plantillas</div>
+          <div class="fs-4 fw-bold text-erp">{{ plantillas().length }}</div>
         </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-lg-6">
+        <div class="card-pro p-3">
+          <h2 class="h6 fw-bold text-erp mb-2">Citas de la semana</h2>
+          <p class="text-muted-erp small mb-2">Solo pendientes de atención (pendiente, confirmada o reprogramada). Seleccione una para el recordatorio.</p>
+          <div class="list-group list-group-flush">
+            @for (c of citasSemana(); track c.id_cita) {
+              <button type="button" class="list-group-item list-group-item-action px-0"
+                      [class.active]="citaSel()?.id_cita === c.id_cita"
+                      (click)="seleccionarCita(c)">
+                <div class="fw-semibold">{{ c.paciente }}</div>
+                <div class="small text-muted">
+                  {{ c.fecha }} · {{ c.hora }} · {{ c.tratamiento }}
+                  · {{ labelEstado(c.estado) }}
+                </div>
+                <div class="small" [class.text-success]="c.telefono" [class.text-warning]="!c.telefono">
+                  WA: {{ c.telefono || 'sin número' }}
+                </div>
+              </button>
+            } @empty {
+              <div class="text-muted-erp small py-2">No hay citas programadas esta semana.</div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <div class="card-pro p-3">
+          <h2 class="h6 fw-bold text-erp mb-2">Recordatorio</h2>
+          @if (!citaSel()) {
+            <p class="text-muted-erp small mb-0">Elija una cita a la izquierda.</p>
+          } @else {
+            <div class="mb-2">
+              <label class="form-label small">Plantilla</label>
+              <select class="form-select form-select-sm"
+                      [ngModel]="plantillaId()"
+                      (ngModelChange)="onPlantillaChange($event)">
+                <option [ngValue]="null">Mensaje genérico</option>
+                @for (p of plantillas(); track p.id_plantilla) {
+                  <option [ngValue]="p.id_plantilla">{{ p.nombre }}</option>
+                }
+              </select>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Mensaje</label>
+              @if (cargandoMensaje()) {
+                <div class="text-muted small py-2">Armando mensaje…</div>
+              }
+              <textarea class="form-control form-control-sm" rows="5"
+                        [ngModel]="mensajePreview()"
+                        (ngModelChange)="onMensajeEdit($event)"></textarea>
+              <div class="form-text">Al cambiar de plantilla se completa con los datos de la cita. Puede ajustar el texto antes de enviar.</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-success" [disabled]="!mensajePreview()"
+                    (click)="abrirWhatsApp()">
+              WhatsApp
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="card-pro p-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div>
+          <h2 class="h6 fw-bold text-erp mb-0">Plantillas de mensaje</h2>
+          <p class="text-muted-erp small mb-0">Se guardan por empresa (Sorela / López). Use variables y edite antes de enviar.</p>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary" (click)="nuevaPlantilla()">
+          Nueva plantilla
+        </button>
+      </div>
+
+      @if (editandoPlantilla()) {
+        <div class="border rounded p-3 mb-3 bg-light">
+          <div class="mb-2">
+            <label class="form-label small">Nombre</label>
+            <input type="text" class="form-control form-control-sm"
+                   [ngModel]="formNombre()" (ngModelChange)="formNombre.set($event)">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Texto</label>
+            <textarea class="form-control form-control-sm" rows="4"
+                      [ngModel]="formCuerpo()" (ngModelChange)="formCuerpo.set($event)"></textarea>
+            <div class="form-text">Variables: {{ ayudaPlaceholders }}</div>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-sm btn-primary" [disabled]="guardandoPlantilla()"
+                    (click)="guardarPlantilla()">
+              {{ guardandoPlantilla() ? 'Guardando…' : 'Guardar plantilla' }}
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="cancelarPlantilla()">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      }
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Vista previa</th>
+              <th class="text-end">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of plantillas(); track p.id_plantilla) {
+              <tr>
+                <td class="fw-semibold">{{ p.nombre }}</td>
+                <td class="small text-muted" style="max-width: 28rem;">
+                  {{ p.cuerpo | slice:0:120 }}{{ (p.cuerpo || '').length > 120 ? '…' : '' }}
+                </td>
+                <td class="text-end text-nowrap">
+                  <button type="button" class="btn btn-sm btn-outline-primary me-1" (click)="editarPlantilla(p)">
+                    Editar
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-danger" (click)="eliminarPlantilla(p)">
+                    Eliminar
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="3" class="text-muted small">Aún no hay plantillas. Cree una o ejecute el patch SQL 044.</td></tr>
+            }
+          </tbody>
+        </table>
       </div>
     </div>
   }

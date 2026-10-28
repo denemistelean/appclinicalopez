@@ -1,0 +1,682 @@
+<div class="hd-wrap">
+  <a routerLink="/pacientes" class="hd-back"><i class="bi bi-arrow-left"></i> Pacientes</a>
+
+  @if (loading()) {
+    <div class="hd-empty">Cargando historia digital…</div>
+  } @else if (!ficha()) {
+    <div class="hd-empty">No se encontró la historia.</div>
+  } @else {
+    <div class="hd-topbar">
+      <div>
+        <h4 class="hd-title mb-1">Historia digital</h4>
+        <div class="text-muted-erp small text-uppercase">
+          {{ ficha()?.historia?.codigo }} · {{ nombrePaciente() }}
+        </div>
+      </div>
+      <div class="hd-steps">
+        @for (p of pestanas; track p.id) {
+          <button type="button" class="hd-step" [class.active]="tab() === p.id" (click)="tab.set(p.id)">
+            {{ p.label }}
+          </button>
+        }
+      </div>
+    </div>
+
+    @if (tab() === 'procedencia') {
+      <div class="hd-card">
+        <div class="hd-section-head"><h5>Procedencia</h5></div>
+        <div class="row g-3" [formGroup]="form">
+          <div class="col-md-6">
+            <label class="form-label">¿Cómo llegó?</label>
+            <ng-select class="ng-select-sm" [items]="procedencias" bindLabel="nombre" bindValue="id"
+                       formControlName="procedencia" [searchable]="true" [clearable]="true"
+                       placeholder="Seleccionar..." appendTo="body"></ng-select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Campaña</label>
+            <input class="form-control" formControlName="campana">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Detalle del referido</label>
+            <textarea class="form-control" rows="3" formControlName="detalle_referido"></textarea>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (tab() === 'antecedentes') {
+      <div class="hd-card">
+        <div class="hd-section-head"><h5>Antecedentes</h5></div>
+        <div class="row g-3" [formGroup]="form">
+          <div class="col-md-6">
+            <label class="form-label">Enfermedades</label>
+            <textarea class="form-control" rows="3" formControlName="enfermedades"></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Alergias y descripción</label>
+            <textarea class="form-control" rows="3" formControlName="alergias"></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Medicamentos actuales</label>
+            <textarea class="form-control" rows="3" formControlName="medicamentos_actuales"></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Tratamientos corporales previos</label>
+            <textarea class="form-control" rows="3" formControlName="tratamientos_previos"></textarea>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Hipertensión</label>
+            <ng-select class="ng-select-sm" [items]="siNo" bindLabel="nombre" bindValue="id"
+                       formControlName="hipertension" [clearable]="true" placeholder="No precisa" appendTo="body"></ng-select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Diabetes</label>
+            <ng-select class="ng-select-sm" [items]="siNo" bindLabel="nombre" bindValue="id"
+                       formControlName="diabetes" [clearable]="true" placeholder="No precisa" appendTo="body"></ng-select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Anticonceptivos</label>
+            <ng-select class="ng-select-sm" [items]="siNo" bindLabel="nombre" bindValue="id"
+                       formControlName="anticonceptivos" [clearable]="true" placeholder="No precisa" appendTo="body"></ng-select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Tabaquismo</label>
+            <ng-select class="ng-select-sm" [items]="siNo" bindLabel="nombre" bindValue="id"
+                       formControlName="tabaquismo" [clearable]="true" placeholder="No precisa" appendTo="body"></ng-select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Observaciones adicionales</label>
+            <textarea class="form-control" rows="3" formControlName="observaciones_antecedentes"></textarea>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (tab() === 'procedencia' || tab() === 'antecedentes') {
+      @if (perms.hasPermission('actualizar_paciente')) {
+        <div class="hd-actions">
+          <button type="button" class="hd-save" [disabled]="guardando()" (click)="guardar()">
+            {{ guardando() ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      }
+    }
+
+    @if (tab() === 'evaluacion') {
+      <div class="hd-card">
+        <div class="hd-section-head"><h5>Nueva evaluación</h5></div>
+        <div class="row g-3" [formGroup]="formEval">
+          <div class="col-md-3">
+            <label class="form-label">Fecha <span class="req-star">*</span></label>
+            <input type="date" class="form-control" formControlName="fecha">
+          </div>
+          <div class="col-md-9">
+            <label class="form-label">Motivo</label>
+            <input class="form-control" formControlName="motivo">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Objetivos</label>
+            <textarea class="form-control" rows="3" formControlName="objetivos"></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Zonas evaluadas</label>
+            <textarea class="form-control" rows="3" formControlName="zonas"></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Hallazgos</label>
+            <textarea class="form-control" rows="3" formControlName="hallazgos"></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Plan de tratamiento</label>
+            <textarea class="form-control" rows="3" formControlName="plan_tratamiento"></textarea>
+          </div>
+        </div>
+        @if (perms.hasPermission('actualizar_paciente')) {
+          <div class="hd-actions">
+            <button type="button" class="hd-save" (click)="agregarEvaluacion()">Registrar evaluación</button>
+          </div>
+        }
+      </div>
+      <div class="hd-card">
+        <div class="hd-section-head"><h5>Fotografías</h5></div>
+        <p class="hd-note">Las fotos se adjuntan en Documentos, categoría Fotos.</p>
+        @for (f of fotos(); track f.id_documento) {
+          <button type="button" class="hd-link" (click)="verArchivo(f)">{{ f.titulo || f.nombre_original }}</button>
+        } @empty {
+          <div class="hd-empty">Sin fotografías.</div>
+        }
+      </div>
+      @for (e of ficha()?.evaluaciones || []; track e.id_evaluacion) {
+        <article class="hd-card hd-item">
+          <div>
+            <strong>{{ e.fecha }}</strong> · {{ e.motivo || 'Evaluación' }}
+            <div class="hd-sub">{{ e.zonas }}</div>
+            <div>{{ e.hallazgos }}</div>
+            <div class="hd-sub">{{ e.plan_tratamiento }}</div>
+          </div>
+          @if (perms.hasPermission('actualizar_paciente')) {
+            <button type="button" class="hd-del" (click)="quitarEvaluacion(e.id_evaluacion)">Quitar</button>
+          }
+        </article>
+      }
+    }
+
+    @if (tab() === 'documentos') {
+      <div class="hd-card">
+        <div class="hd-section-head"><h5>Documentos</h5></div>
+        <div class="hd-steps mb-3">
+          @for (f of filtrosDocumento; track f.id) {
+            <button type="button" class="hd-step" [class.active]="filtroDoc() === f.id" (click)="filtroDoc.set(f.id)">
+              {{ f.nombre }}
+            </button>
+          }
+        </div>
+        @if (perms.hasPermission('crear_documento')) {
+          <div class="row g-2 align-items-end" [formGroup]="formDoc">
+            <div class="col-md-4">
+              <label class="form-label">Tipo</label>
+              <ng-select class="ng-select-sm" [items]="ficha()?.tipos || []" bindLabel="nombre" bindValue="id_tipo_documento"
+                         formControlName="id_tipo_documento" [searchable]="true" placeholder="Seleccionar..." appendTo="body"></ng-select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Título</label>
+              <input class="form-control" formControlName="titulo">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Archivo</label>
+              <input type="file" class="form-control" (change)="elegirArchivo($event)">
+            </div>
+            <div class="col-md-2">
+              <button type="button" class="hd-save w-100" (click)="subirDocumento()">Subir</button>
+            </div>
+          </div>
+        }
+        <div class="hd-list">
+          @for (d of documentosVisibles(); track d.id_documento) {
+            <button type="button" class="hd-link" (click)="verArchivo(d)">
+              <span>{{ d.tipo_nombre }}</span>
+              <strong>{{ d.titulo || d.nombre_original }}</strong>
+              <span>{{ d.fecha_documento || '' }}</span>
+            </button>
+          } @empty {
+            <div class="hd-empty">No hay documentos en este grupo.</div>
+          }
+        </div>
+      </div>
+    }
+
+    @if (tab() === 'atenciones') {
+      <div class="aten-layout">
+        <aside class="aten-list">
+          <div class="aten-list-head">
+            <span>Citas del paciente</span>
+            <button type="button" class="btn-link-sm" (click)="cargar()">Actualizar</button>
+          </div>
+          @for (c of ficha()?.citas || []; track c.id_cita) {
+            <button type="button" class="aten-item"
+                    [class.active]="citaSel()?.id_cita === c.id_cita"
+                    (click)="seleccionarCita(c)">
+              <div class="aten-item-main">
+                <div class="aten-item-title">{{ tituloCita(c) }}</div>
+                <div class="aten-item-meta">
+                  {{ c.personal || '—' }}
+                  @if (horaCita(c); as h) { · {{ h }} }
+                </div>
+              </div>
+              <div class="aten-item-date">{{ fechaCitaCorta(c) }}</div>
+            </button>
+          } @empty {
+            <div class="ap-empty-sec">Sin citas registradas</div>
+          }
+        </aside>
+
+        <section class="aten-detail">
+          @if (!citaSel()) {
+            <div class="ap-placeholder">Seleccione una cita a la izquierda</div>
+          } @else {
+            <div class="aten-detail-head">
+              <div>
+                <h5 class="mb-1">{{ tituloCita(citaSel()) }}</h5>
+                <div class="aten-item-meta">
+                  {{ citaSel()?.personal || '—' }} · {{ fechaCitaCorta(citaSel()) }}
+                  @if (horaCita(citaSel()); as h) { · {{ h }} }
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="aten-badge" [class.ok]="estadoAtencionLabel(citaSel()) === 'Completada'">
+                  {{ estadoAtencionLabel(citaSel()) }}
+                </span>
+                @if (puedeAtender(citaSel())) {
+                  <button type="button" class="btn btn-primary btn-sm" (click)="irAtender(citaSel())">
+                    Atender
+                  </button>
+                }
+              </div>
+            </div>
+
+            @if (loadingDetalle()) {
+              <div class="ap-empty-sec">Cargando atención…</div>
+            } @else if (detalleAtencion(); as det) {
+              @if (!det.atencion) {
+                <div class="ap-placeholder">
+                  Esta cita aún no tiene atención registrada.
+                  @if (puedeAtender(citaSel())) {
+                    <div class="mt-2">
+                      <button type="button" class="btn btn-primary btn-sm" (click)="irAtender(citaSel())">
+                        Registrar atención
+                      </button>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="aten-acc">
+                  <details open>
+                    <summary>Sesión</summary>
+                    <div class="aten-acc-body">
+                      @if (det.vinculo_cita?.numero_sesion) {
+                        <div><b>N.º sesión:</b> {{ det.vinculo_cita.numero_sesion }}</div>
+                      }
+                      @if (nombreItemAtencion(det); as nom) {
+                        <div><b>Servicio / plan:</b> {{ nom }}</div>
+                      }
+                      @if (det.atencion.registrado_por) {
+                        <div><b>Registró:</b> {{ det.atencion.registrado_por }}</div>
+                      }
+                      @if (det.atencion.fecha_cierre) {
+                        <div><b>Cierre:</b> {{ det.atencion.fecha_cierre }}</div>
+                      }
+                    </div>
+                  </details>
+                  <details open>
+                    <summary>Anamnesis y zona</summary>
+                    <div class="aten-acc-body">
+                      <div class="aten-text">{{ det.atencion.anamnesis || '—' }}</div>
+                      <div class="mt-2">
+                        @if (det.atencion.zona) { <span><b>Zona:</b> {{ det.atencion.zona }}</span> }
+                        @if (det.atencion.lado) { <span class="ms-2"><b>Lado:</b> {{ det.atencion.lado }}</span> }
+                      </div>
+                      @if (nombresTecnologias(det).length) {
+                        <div class="mt-2"><b>Tecnologías:</b> {{ nombresTecnologias(det).join(', ') }}</div>
+                      }
+                      @if (det.atencion.parametros) {
+                        <div class="mt-2"><b>Parámetros</b></div>
+                        <div class="aten-text">{{ det.atencion.parametros }}</div>
+                      }
+                    </div>
+                  </details>
+                  <details open>
+                    <summary>Evolución</summary>
+                    <div class="aten-acc-body">
+                      <div><b>Evolución</b></div>
+                      <div class="aten-text">{{ det.atencion.evolucion || '—' }}</div>
+                      <div class="mt-2"><b>Incidencias</b></div>
+                      <div class="aten-text">{{ det.atencion.incidencias || '—' }}</div>
+                      <div class="mt-2"><b>Indicaciones</b></div>
+                      <div class="aten-text">{{ det.atencion.indicaciones || '—' }}</div>
+                      @if (det.atencion.proxima_revision) {
+                        <div class="mt-2"><b>Próxima revisión:</b> {{ det.atencion.proxima_revision }}</div>
+                      }
+                    </div>
+                  </details>
+                  @if (det.atencion.medida; as med) {
+                    <details open>
+                      <summary>Medidas</summary>
+                      <div class="aten-acc-body">
+                        <div class="small">
+                          @if (med.fecha) { Fecha {{ med.fecha }} · }
+                          @if (med.peso != null) { Peso {{ med.peso }} · }
+                          @if (med.cintura != null) { Cintura {{ med.cintura }} · }
+                          @if (med.cadera != null) { Cadera {{ med.cadera }} · }
+                          @if (med.abdomen_alto != null) { Abdomen {{ med.abdomen_alto }} · }
+                          @if (med.ombligo != null) { Ombligo {{ med.ombligo }} · }
+                          @if (med.grasa_corporal != null) { Grasa {{ med.grasa_corporal }} · }
+                          @if (med.masa_muscular != null) { Masa {{ med.masa_muscular }} · }
+                          @if (med.agua_corporal != null) { Agua {{ med.agua_corporal }} }
+                        </div>
+                        @if (med.observaciones) {
+                          <div class="aten-text mt-2">{{ med.observaciones }}</div>
+                        }
+                      </div>
+                    </details>
+                  }
+                </div>
+              }
+            } @else {
+              <div class="ap-empty-sec">No se pudo cargar el detalle.</div>
+            }
+          }
+        </section>
+      </div>
+    }
+
+    @if (tab() === 'administrativa') {
+      <div class="hd-kpis">
+        <article><span>Precio acordado</span><strong>{{ ficha()?.resumen?.comprometido | number:'1.2-2' }}</strong></article>
+        <article><span>Pagado</span><strong>{{ ficha()?.resumen?.pagado | number:'1.2-2' }}</strong></article>
+        <article><span>Saldo</span><strong>{{ ficha()?.resumen?.saldo | number:'1.2-2' }}</strong></article>
+        <article><span>Sesiones pendientes</span><strong>{{ ficha()?.resumen?.sesiones_pendientes }}</strong></article>
+      </div>
+
+      @if (perms.hasPermission('administrar_configuracion_finanzas')) {
+        <div class="hd-card">
+          <label class="form-check mb-0">
+            <input type="checkbox" class="form-check-input" [checked]="requiereComprobante()"
+                   (change)="toggleRequiereComprobante($event)">
+            <span class="form-check-label">
+              Requerir comprobante al cobrar
+              <span class="hd-sub d-block">Si está activo, tipo y número de comprobante son obligatorios en cada pago.</span>
+            </span>
+          </label>
+        </div>
+      }
+
+      <div class="hd-card">
+        <div class="hd-section-head"><h5>Planes de tratamiento</h5></div>
+        <p class="hd-note">Haga clic en un plan para ver pagos y el detalle. Los KPIs de arriba consideran solo planes vigentes.</p>
+        @if (perms.hasPermission('actualizar_paciente')) {
+          <div class="row g-2 align-items-end mb-3" [formGroup]="formPaquete">
+            <div class="col-md-5">
+              <label class="form-label">Paquete del catálogo</label>
+              <ng-select class="ng-select-sm" [items]="ficha()?.catalogo || []" bindLabel="nombre" bindValue="id_item"
+                         formControlName="id_item" [searchable]="true" placeholder="Buscar plan o servicio..." appendTo="body"
+                         (change)="alElegirPaquete($event)">
+                <ng-template ng-label-tmp let-item="item">{{ etiquetaPaquete(item) }}</ng-template>
+                <ng-template ng-option-tmp let-item="item">{{ etiquetaPaquete(item) }}</ng-template>
+              </ng-select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Sesiones</label>
+              <input type="number" class="form-control" formControlName="sesiones_total" min="1">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Precio acordado</label>
+              <input type="number" class="form-control" formControlName="precio_acordado" min="0" step="0.01">
+            </div>
+            <div class="col-md-2">
+              <button type="button" class="hd-save w-100" (click)="agregarPaquete()">Asignar</button>
+            </div>
+          </div>
+        }
+
+        @if (planesVigentes().length) {
+          <div class="hd-plan-group-label">Vigentes</div>
+          @for (p of planesVigentes(); track p.id_hd_paquete) {
+            <ng-container *ngTemplateOutlet="planAdminTpl; context: { $implicit: p }"></ng-container>
+          }
+        } @else {
+          <div class="hd-empty">Sin planes vigentes.</div>
+        }
+
+        @if (planesHistorial().length) {
+          <div class="hd-plan-group-label mt-3">Realizados / dados de baja</div>
+          <p class="hd-note mb-2">Planes completados o cancelados a mitad de tratamiento. Se conservan sesiones y pagos.</p>
+          @for (p of planesHistorial(); track p.id_hd_paquete) {
+            <ng-container *ngTemplateOutlet="planAdminTpl; context: { $implicit: p }"></ng-container>
+          }
+        }
+      </div>
+
+      <ng-template #planAdminTpl let-p>
+        <article class="hd-plan" [class.open]="planSelId() === p.id_hd_paquete">
+          <button type="button" class="hd-plan-head" (click)="togglePlan(p)">
+            <div class="hd-plan-main">
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <strong>{{ p.nombre }}</strong>
+                <span class="aten-badge" [class.ok]="p.estado_plan === 'VIGENTE'"
+                      [class.warn]="p.estado_plan === 'COMPLETADO'"
+                      [class.danger]="p.estado_plan === 'BAJA'">
+                  {{ etiquetaEstadoPlan(p) }}
+                </span>
+              </div>
+              <div class="hd-sub">
+                {{ p.sesiones_usadas }}/{{ p.sesiones_total }} sesiones
+                · {{ pendientes(p) }} {{ pendientes(p) == 1 ? 'pendiente' : 'pendientes' }}
+                · Precio {{ p.precio_acordado | number:'1.2-2' }}
+                · Pagado {{ p.pagado | number:'1.2-2' }}
+                · Saldo {{ p.saldo | number:'1.2-2' }}
+              </div>
+              @if (p.estado_plan === 'BAJA') {
+                <div class="hd-sub">
+                  Baja@if (p.fecha_baja) { {{ p.fecha_baja }}}
+                  @if (p.motivo_baja) { · {{ p.motivo_baja }} }
+                  @if (p.usuario_baja) { · {{ p.usuario_baja }} }
+                </div>
+              } @else if (p.estado_plan === 'VIGENTE' && pendientes(p) > 0) {
+                <div class="hd-sub">Siguiente a programar: sesión {{ siguienteSesion(p) }} de {{ p.sesiones_total }}</div>
+              }
+            </div>
+            <i class="bi" [class.bi-chevron-down]="planSelId() !== p.id_hd_paquete"
+               [class.bi-chevron-up]="planSelId() === p.id_hd_paquete"></i>
+          </button>
+
+          @if (planSelId() === p.id_hd_paquete) {
+            <div class="hd-plan-body">
+              @for (c of p.componentes || []; track c.id_hd_componente) {
+                <div class="hd-sub">
+                  {{ c.nombre }}:
+                  {{ c.sesiones_usadas }} {{ c.sesiones_usadas == 1 ? 'usada' : 'usadas' }}
+                  de {{ c.sesiones_total }}
+                  @if (c.sesiones_usadas < c.sesiones_total && p.estado_plan === 'VIGENTE') {
+                    · siguiente: sesión {{ siguienteComponente(c) }}
+                  } @else if (c.sesiones_usadas >= c.sesiones_total) {
+                    · completado
+                  }
+                </div>
+              }
+              @for (m of p.movimientos || []; track m.id_movimiento) {
+                <div class="hd-sub d-flex flex-wrap gap-2 align-items-center">
+                  <span>{{ m.fecha }} · {{ m.tipo === 'RESTITUCION' ? 'Restitución' : 'Descuento' }} · {{ m.motivo }} · {{ m.usuario }}</span>
+                  @if (puedeRestituirMovimiento(p, m)) {
+                    <button type="button" class="hd-del" (click)="restituirMovimiento(m)">Restituir sesión</button>
+                  }
+                </div>
+              }
+
+              <div class="hd-plan-pagos">
+                <div class="hd-plan-pagos-title">Pagos de este plan</div>
+                @for (pay of pagosDePlan(p); track pay.id_pago) {
+                  <article class="hd-item">
+                    <div>
+                      <strong>{{ pay.fecha }}</strong> {{ pay.metodo_pago }}
+                      · {{ etiquetaTipoPago(pay.tipo_pago) }}
+                      · S/ {{ pay.monto | number:'1.2-2' }}
+                      @if (pay.moneda === 'USD' && pay.monto_moneda != null) {
+                        · US$ {{ pay.monto_moneda | number:'1.2-2' }}
+                        @if (pay.tipo_cambio) { (TC {{ pay.tipo_cambio }}) }
+                      }
+                      <div class="hd-sub">{{ pay.concepto || '—' }}
+                        @if (pay.comprobante_numero) { · {{ pay.comprobante_tipo }} {{ pay.comprobante_numero }} }
+                      </div>
+                    </div>
+                    @if (puedeCobrarPlan(p) && perms.hasPermission('ajustar_pago')) {
+                      <div class="hd-actions">
+                        <button type="button" class="hd-del" (click)="ajustarPago(pay)">Ajustar</button>
+                        <button type="button" class="hd-del" (click)="anularPago(pay)">Anular</button>
+                      </div>
+                    }
+                  </article>
+                } @empty {
+                  <div class="hd-empty">Sin pagos en este plan.</div>
+                }
+              </div>
+
+              @if (puedeCobrarPlan(p) && perms.hasPermission('actualizar_paciente')) {
+                <div class="hd-plan-cobro" [formGroup]="formPago">
+                  <div class="hd-plan-pagos-title">Registrar pago</div>
+                  <p class="hd-note mb-2">
+                    Total {{ p.precio_acordado | number:'1.2-2' }} · Pagado {{ p.pagado | number:'1.2-2' }}
+                    · Saldo {{ p.saldo | number:'1.2-2' }}
+                    @if (p.exceso > 0) {
+                      <span class="text-danger"> · Exceso {{ p.exceso | number:'1.2-2' }}; no se permiten nuevos cobros.</span>
+                    }
+                  </p>
+                  <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                      <label class="form-label">Moneda</label>
+                      <ng-select class="ng-select-sm" [items]="monedas" bindLabel="nombre" bindValue="id"
+                                 formControlName="moneda" [clearable]="false" appendTo="body"></ng-select>
+                    </div>
+                    @if (formPago.get('moneda')?.value === 'USD') {
+                      <div class="col-md-2">
+                        <label class="form-label">Monto USD</label>
+                        <input type="number" class="form-control" formControlName="monto_moneda" min="0.01" step="0.01">
+                      </div>
+                      <div class="col-md-2">
+                        <label class="form-label">T.C. del día</label>
+                        <input type="number" class="form-control" formControlName="tipo_cambio" min="0.0001" step="0.0001"
+                               placeholder="Soles por USD">
+                      </div>
+                    } @else {
+                      <div class="col-md-2">
+                        <label class="form-label">Monto S/</label>
+                        <input type="number" class="form-control" formControlName="monto" min="0.01" step="0.01"
+                               [attr.max]="p.saldo ?? null">
+                      </div>
+                    }
+                    <div class="col-md-2">
+                      <label class="form-label">Medio</label>
+                      <ng-select class="ng-select-sm" [items]="metodos" bindLabel="nombre" bindValue="id"
+                                 formControlName="metodo_pago" [clearable]="false" [searchable]="true" appendTo="body"></ng-select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Tipo de pago</label>
+                      <ng-select class="ng-select-sm" [items]="opcionesTipoPagoActual()" bindLabel="nombre" bindValue="id"
+                                 formControlName="tipo_pago" [clearable]="true" placeholder="Automático según monto"
+                                 appendTo="body"></ng-select>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Tipo comprobante</label>
+                      <input class="form-control" formControlName="comprobante_tipo"
+                             [placeholder]="requiereComprobante() ? 'Obligatorio' : 'Opcional'">
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Nº comprobante</label>
+                      <input class="form-control" formControlName="comprobante_numero"
+                             [placeholder]="requiereComprobante() ? 'Obligatorio' : 'Opcional'">
+                    </div>
+                    <div class="col-md-8">
+                      <label class="form-label">Concepto</label>
+                      <input class="form-control" formControlName="concepto">
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                      <button type="button" class="hd-save w-100" (click)="agregarPago()">Registrar pago</button>
+                    </div>
+                  </div>
+                </div>
+              }
+
+              @if (p.estado_plan === 'VIGENTE' && perms.hasPermission('actualizar_paciente')) {
+                <div class="hd-actions mt-2">
+                  @if (pendientes(p) > 0) {
+                    <button type="button" class="hd-del" (click)="abrirProgramar(p)">
+                      Programar sesión {{ siguienteSesion(p) }} de {{ p.sesiones_total }}
+                    </button>
+                  }
+                  <button type="button" class="hd-del" (click)="bajarPlan(p)">Dar de baja</button>
+                </div>
+                @if (programarId() === p.id_hd_paquete) {
+                  <div class="row g-2 mt-2" [formGroup]="formCita">
+                    <div class="col-md-3">
+                      <label class="form-label">Fecha</label>
+                      <input type="date" class="form-control" formControlName="fecha">
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Hora</label>
+                      <input type="time" class="form-control" formControlName="hora_inicio">
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Duración</label>
+                      <ng-select class="ng-select-sm" [items]="duraciones" bindLabel="nombre" bindValue="id"
+                                 formControlName="duracion_minutos" [clearable]="false" appendTo="body"></ng-select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Cosmiatra</label>
+                      <ng-select class="ng-select-sm" [items]="ficha()?.personal || []" bindValue="id_personal"
+                                 formControlName="id_personal" [searchable]="true" placeholder="Buscar" appendTo="body">
+                        <ng-template ng-label-tmp let-item="item">{{ etiquetaPersonal(item) }}</ng-template>
+                        <ng-template ng-option-tmp let-item="item">{{ etiquetaPersonal(item) }}</ng-template>
+                      </ng-select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                      <button type="button" class="hd-save w-100" [disabled]="programando()" (click)="programarSiguiente(p)">
+                        Programar
+                      </button>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+          }
+        </article>
+      </ng-template>
+
+      @if (sesionesPorProgramar().length) {
+        <div class="hd-card">
+          <div class="hd-section-head"><h5>Sesiones por programar</h5></div>
+          <p class="hd-note">Planes con sesiones pendientes. “Sugerida desde” orienta la próxima cita (última sesión + intervalo del catálogo); no bloquea la agenda.</p>
+          @for (p of sesionesPorProgramar(); track p.id_hd_paquete) {
+            <article class="hd-item">
+              <div>
+                <strong>{{ p.nombre }}</strong>
+                <div class="hd-sub">
+                  Sesión {{ p.numero_siguiente_sesion }} de {{ p.sesiones_total }}
+                  @if (p.fecha_sugerida_desde) { · sugerida desde {{ p.fecha_sugerida_desde }} }
+                  @if (p.id_cita_siguiente) { · ya tiene cita vigente }
+                </div>
+              </div>
+              @if (perms.hasPermission('actualizar_paciente') || perms.hasPermission('crear_cita')) {
+                <button type="button" class="hd-del" (click)="abrirProgramar(p)">Programar aquí</button>
+                <button type="button" class="hd-del" (click)="irAgendarPlan(p)">Agendar</button>
+              }
+            </article>
+          }
+        </div>
+      }
+    }
+
+    @if (tab() === 'cirugias') {
+      <div class="hd-card">
+        <div class="hd-section-head"><h5>Cirugía realizada</h5></div>
+        <div class="row g-3" [formGroup]="formCirugia">
+          <div class="col-md-3">
+            <label class="form-label">Fecha <span class="req-star">*</span></label>
+            <input type="date" class="form-control" formControlName="fecha">
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">Cirujano tratante</label>
+            <ng-select class="ng-select-sm" [items]="ficha()?.personal || []" bindValue="id_personal"
+                       formControlName="id_personal" [searchable]="true" placeholder="Buscar personal..." appendTo="body">
+              <ng-template ng-label-tmp let-item="item">{{ etiquetaPersonal(item) }}</ng-template>
+              <ng-template ng-option-tmp let-item="item">{{ etiquetaPersonal(item) }}</ng-template>
+            </ng-select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Zonas</label>
+            <input class="form-control" formControlName="zonas">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Indicaciones recibidas</label>
+            <textarea class="form-control" rows="3" formControlName="indicaciones"></textarea>
+          </div>
+        </div>
+        @if (perms.hasPermission('actualizar_paciente')) {
+          <div class="hd-actions">
+            <button type="button" class="hd-save" (click)="agregarCirugia()">Registrar cirugía</button>
+          </div>
+        }
+      </div>
+      @for (c of ficha()?.cirugias || []; track c.id_cirugia) {
+        <article class="hd-card hd-item">
+          <div>
+            <strong>{{ c.fecha }}</strong> · {{ c.cirujano }}
+            <div>{{ c.zonas }}</div>
+            <div class="hd-sub">{{ c.indicaciones }}</div>
+          </div>
+          @if (perms.hasPermission('actualizar_paciente')) {
+            <button type="button" class="hd-del" (click)="quitarCirugia(c.id_cirugia)">Quitar</button>
+          }
+        </article>
+      }
+    }
+  }
+</div>

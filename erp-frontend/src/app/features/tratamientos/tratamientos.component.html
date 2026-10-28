@@ -1,26 +1,4 @@
 <div class="container-fluid p-3 p-md-4 form-wrapper mx-auto" style="max-width: var(--erp-max-width);">
-  <div class="card-pro mb-3 p-3">
-    <div class="row g-2 align-items-end">
-      <div class="col-md-3">
-        <label class="form-label">Tipo</label>
-        <ng-select class="ng-select-sm" [items]="tiposProcedimiento" bindLabel="nombre" bindValue="id"
-                   [formControl]="filtroTipoProc" placeholder="Todos" [clearable]="true" appendTo="body"></ng-select>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">Categoría</label>
-        <input type="text" class="form-control" [formControl]="filtroCategoria" placeholder="Filtrar categoría">
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">Estado</label>
-        <ng-select class="ng-select-sm" [items]="estados" bindLabel="nombre" bindValue="id"
-                   [formControl]="filtroEstado" placeholder="Todos" [clearable]="true" appendTo="body"></ng-select>
-      </div>
-      <div class="col-md-2">
-        <button type="button" class="btn btn-soft-neutral w-100" (click)="aplicarFiltros()">Filtrar</button>
-      </div>
-    </div>
-  </div>
-
   <div class="card-pro table-pro-container mb-3 p-0 p-md-3 animate__animated animate__fadeInUp">
     <app-table-pro titulo="Procedimientos" subtitulo="Catálogo quirúrgico y estético (con duración)" btnText="NUEVO PROCEDIMIENTO"
       [showAddBtn]="perms.hasPermission('crear_tratamiento')" [loading]="crud.tableLoading()"

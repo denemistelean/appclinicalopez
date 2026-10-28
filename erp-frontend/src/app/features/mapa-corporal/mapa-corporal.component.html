@@ -41,7 +41,7 @@
               (click)="toggleEmpty()">
         {{ hideEmpty() ? 'Mostrar todos los marcadores' : 'Ocultar marcadores sin registro' }}
       </button>
-      @if (perms.hasPermission('actualizar_mapa_marcador')) {
+      @if (!soloLectura && perms.hasPermission('actualizar_mapa_marcador')) {
         <button type="button" class="btn btn-outline-primary w-100 mb-2"
                 [disabled]="!formPac.value.id_paciente || loadingModel() || capturando()"
                 (click)="generarCapturasInforme()">
@@ -49,7 +49,7 @@
           {{ capturando() ? 'Capturando…' : 'Capturar frente y espalda (informe)' }}
         </button>
       }
-      @if (perms.hasPermission('crear_mapa_marcador')) {
+      @if (!soloLectura && perms.hasPermission('crear_mapa_marcador')) {
         <button type="button" class="btn w-100 mb-3"
                 [class.btn-primary]="modoInsertar()" [class.btn-soft-neutral]="!modoInsertar()"
                 (click)="setModoInsertar(!modoInsertar())">
@@ -92,8 +92,8 @@
             <div class="form-text">{{ formZona.value.lado }} · {{ formZona.value.zona_codigo }}</div>
           </div>
           <div class="col-12">
-            <label class="form-label">Procedimiento <span class="req-star">*</span></label>
-            <ng-select class="ng-select-sm" [items]="procedimientos" bindLabel="nombre" bindValue="id"
+            <label class="form-label">{{ etiquetaProcedimiento }} <span class="req-star">*</span></label>
+            <ng-select class="ng-select-sm" [items]="listaProcedimientos()" bindLabel="nombre" bindValue="id"
                        formControlName="procedimiento" appendTo="body" [searchable]="true"
                        placeholder="Seleccione..." notFoundText="Sin resultados"></ng-select>
             <app-form-error [control]="formZona.get('procedimiento')"></app-form-error>
@@ -111,10 +111,12 @@
             <label class="form-label">Notas clínicas</label>
             <textarea class="form-control form-control-sm" rows="3" formControlName="notas"></textarea>
           </div>
+          @if (!soloLectura) {
           <div class="col-12">
             <button type="button" class="btn btn-primary w-100" (click)="guardarZona()">Guardar registro de esta zona</button>
           </div>
-          @if (formZona.value.id_mapa_marcador && perms.hasPermission('eliminar_mapa_marcador')) {
+          }
+          @if (!soloLectura && formZona.value.id_mapa_marcador && perms.hasPermission('eliminar_mapa_marcador')) {
             <div class="col-12">
               <button type="button" class="btn btn-soft-neutral w-100" (click)="quitarZona()">Quitar registro</button>
             </div>

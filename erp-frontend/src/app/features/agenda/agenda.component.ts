@@ -1,4 +1,5 @@
 import {
+  AfterViewInit,
   Component,
   inject,
   OnInit,
@@ -6,24 +7,27 @@ import {
   signal,
   computed,
   TemplateRef,
+  ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormControl } from '@angular/forms';
 import { NgSelectModule } from '@ng-select/ng-select';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NgbModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { forkJoin, of, Subject } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 
 import { FormErrorComponent } from 'src/app/shared/components/form-error/form-error.component';
 import { PermissionsService } from 'src/app/core/services/seguridad/permissions.service';
 import { AlertService } from 'src/app/core/services/ui/alert.service';
 import { SedeContextService } from 'src/app/core/services/sede-context.service';
+import { UnidadContextService } from 'src/app/core/services/unidad-context.service';
 import { SedesService } from '../sedes/sedes.service';
 import { PersonalService } from '../personal/personal.service';
 import { PacientesService } from '../pacientes/pacientes.service';
 import { TratamientosService } from '../tratamientos/tratamientos.service';
 import { AgendaService } from './agenda.service';
+import { HistoriaDigitalService } from '../historia-digital/historia-digital.service';
 
 export type VistaAgenda = 'dia' | 'horario' | 'semana' | 'board';
 
@@ -37,18 +41,24 @@ const ESTADOS_BOARD = ['PENDIENTE', 'CONFIRMADA', 'EN_ATENCION', 'FINALIZADA'] a
   styleUrls: ['./agenda.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AgendaComponent implements OnInit {
+export class AgendaComponent implements OnInit, AfterViewInit {
   private fb = inject(FormBuilder);
   private service = inject(AgendaService);
   private sedesService = inject(SedesService);
   private personalService = inject(PersonalService);
   private pacientesService = inject(PacientesService);
   private tratamientosService = inject(TratamientosService);
+  private hdApi = inject(HistoriaDigitalService);
   private sedeCtx = inject(SedeContextService);
+  private unidad = inject(UnidadContextService);
   private alert = inject(AlertService);
   private modal = inject(NgbModal);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   public perms = inject(PermissionsService);
+
+  @ViewChild('modalCita') modalCitaTpl?: TemplateRef<any>;
+  private queryPrefillConsumido = false;
 
   form: FormGroup;
   fechaDia = new FormControl(
@@ -66,13 +76,20 @@ export class AgendaComponent implements OnInit {
   loading = signal(false);
   validacion = signal<any>(null);
   sugerencia = signal<string | null>(null);
+  /** Tras Aceptar el horario sugerido: oculta Aceptar y deja solo Cancelar. */
+  sugerenciaAceptada = signal(false);
   waitlist = signal<any[]>([]);
   paquetes = signal<any[]>([]);
+  /** Planes HD con sesiones pendientes (aviso opcional al crear cita). */
+  planesPendientes = signal<any[]>([]);
+  planAceptadoId = signal<number | null>(null);
   citaDetalle = signal<any>(null);
 
   sedes = signal<any[]>([]);
   personal = signal<any[]>([]);
   pacientes = signal<any[]>([]);
+  pacientesLoading = signal(false);
+  pacTypeahead$ = new Subject<string>();
   tratamientos = signal<any[]>([]);
   tiposCita = signal<any[]>([]);
   tipoSel = signal<any>(null);
@@ -389,9 +406,27 @@ export class AgendaComponent implements OnInit {
         }
       },
     });
-    this.pacientesService.findAll(1, 200, '').subscribe({
-      next: (res: any) => this.pacientes.set(res.data?.data || res.data || []),
+    this.pacientesService.findAll(1, 100, '').subscribe({
+      next: (res: any) => this.pacientes.set(this.mapPacientes(res.data?.data || res.data || [])),
     });
+    this.pacTypeahead$
+      .pipe(
+        debounceTime(280),
+        distinctUntilChanged(),
+        switchMap((term) => {
+          this.pacientesLoading.set(true);
+          return this.pacientesService.findAll(1, 50, String(term || '').trim()).pipe(
+            catchError(() => of({ data: { data: [] } })),
+          );
+        }),
+      )
+      .subscribe({
+        next: (res: any) => {
+          this.pacientesLoading.set(false);
+          this.pacientes.set(this.mapPacientes(res.data?.data || res.data || []));
+        },
+        error: () => this.pacientesLoading.set(false),
+      });
     this.tratamientosService.findAll(1, 100, '', { estado: 'ACTIVO' }).subscribe({
       next: (res: any) => {
         const list = res.data?.data || res.data || [];
@@ -441,14 +476,21 @@ export class AgendaComponent implements OnInit {
       this.tipoSel.set(tipo);
       this.validacion.set(null);
       this.sugerencia.set(null);
+      this.sugerenciaAceptada.set(false);
       this.tipoProcedimientoSel.set(null);
       this.tipoProcedimientoCtrl.setValue(null, { emitEvent: false });
       this.form.patchValue({ ids_tratamiento: [] });
       this.idsTratamientoSel.set([]);
     });
     this.form.get('id_paciente')?.valueChanges.subscribe((id) => {
-      if (id) this.cargarPaquetes(id);
-      else this.paquetes.set([]);
+      this.planAceptadoId.set(null);
+      if (id) {
+        this.cargarPaquetes(id);
+        this.cargarPlanesPendientes(Number(id));
+      } else {
+        this.paquetes.set([]);
+        this.planesPendientes.set([]);
+      }
     });
     this.tipoProcedimientoCtrl.valueChanges.subscribe((tipo) => {
       this.onTipoProcedimientoChange(tipo);
@@ -509,14 +551,14 @@ export class AgendaComponent implements OnInit {
   seleccionarTodasSedes() {
     const ids = this.sedes().map((s) => Number(s.id_sede));
     if (!ids.length) return;
-    this.setSedesFiltro(ids); // valueChanges → recargar
+    this.setSedesFiltro(ids); // valueChanges ? recargar
     this.form.patchValue({ id_sede: ids[0] });
     this.cargarSalasEquipos(ids[0]);
   }
 
   seleccionarTodosEspecialistas() {
     this.filtroEspecialistas.set([]);
-    this.filtroEspecialistasCtrl.setValue([]); // valueChanges → refresca Semana
+    this.filtroEspecialistasCtrl.setValue([]); // valueChanges ? refresca Semana
   }
 
   prefillDesdeSlot(iso: string) {
@@ -692,7 +734,10 @@ export class AgendaComponent implements OnInit {
     });
   }
 
-  abrirModalCita(tpl: TemplateRef<any>, prefill?: { hora?: string; id_personal?: number }) {
+  abrirModalCita(
+    tpl: TemplateRef<any>,
+    prefill?: { hora?: string; id_personal?: number; id_paciente?: number; id_hd_paquete?: number },
+  ) {
     this.editingCitaId.set(null);
     this.limpiarFormularioCita();
     const sede = this.sedeActiva();
@@ -701,13 +746,40 @@ export class AgendaComponent implements OnInit {
     this.form.patchValue({
       hora_inicio: hora,
       id_personal: prefill?.id_personal || this.idPersonalDefault(),
+      ...(prefill?.id_paciente ? { id_paciente: prefill.id_paciente } : {}),
     });
     this.horaInicioSel.set(hora);
+    if (prefill?.id_hd_paquete) {
+      this.planAceptadoId.set(Number(prefill.id_hd_paquete));
+    }
+    if (prefill?.id_paciente) this.asegurarPacienteEnLista(Number(prefill.id_paciente));
     this.modalCitaRef = this.modal.open(tpl, {
       centered: true,
       size: 'lg',
       backdrop: 'static',
       scrollable: true,
+    });
+  }
+
+  ngAfterViewInit() {
+    this.consumirQueryPrefillAgenda();
+  }
+
+  /** Prefill desde HD («Agendar»): abre modal con paciente/plan; no bloquea si falla el aviso. */
+  private consumirQueryPrefillAgenda() {
+    if (this.queryPrefillConsumido || !this.modalCitaTpl) return;
+    const q = this.route.snapshot.queryParamMap;
+    const idPac = Number(q.get('id_paciente') || 0);
+    const idPlan = Number(q.get('id_hd_paquete') || 0);
+    if (idPac <= 0) return;
+    this.queryPrefillConsumido = true;
+    void Promise.resolve().then(() => {
+      if (!this.modalCitaTpl) return;
+      this.abrirModalCita(this.modalCitaTpl, {
+        id_paciente: idPac,
+        id_hd_paquete: idPlan > 0 ? idPlan : undefined,
+      });
+      this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
     });
   }
 
@@ -747,7 +819,7 @@ export class AgendaComponent implements OnInit {
 
   heightPx(horaIni: string, horaFin: string): number {
     const span = this.toMin(horaFin) - this.toMin(horaIni);
-    // 30 min ≈ 32px con slot 64; mínimo 44px para leer hora + paciente
+    // 30 min → 32px con slot 64; mínimo 44px para leer hora + paciente
     return Math.max(44, (Math.max(span, 15) / 60) * this.slotPx);
   }
 
@@ -1022,24 +1094,45 @@ export class AgendaComponent implements OnInit {
   }
 
   puedeCancelar(c: any): boolean {
-    return !['FINALIZADA', 'CANCELADA'].includes(c?.estado);
+    return !['FINALIZADA', 'CANCELADA', 'NO_ASISTIO', 'REPROGRAMADA'].includes(c?.estado);
   }
 
   puedeEditar(c: any): boolean {
-    return !['FINALIZADA', 'CANCELADA'].includes(c?.estado);
+    return !['FINALIZADA', 'CANCELADA', 'NO_ASISTIO', 'REPROGRAMADA'].includes(c?.estado);
+  }
+
+  puedeMarcarNoAsistio(c: any): boolean {
+    return ['PENDIENTE', 'CONFIRMADA', 'EN_ATENCION'].includes(c?.estado);
   }
 
   cambiarEstadoCita(modal: any, estado: string) {
     const c = this.citaDetalle();
     if (!c) return;
-    this.service.cambiarEstado(c.id_cita, estado).subscribe({
-      next: () => {
-        modal.close();
-        this.alert.success(`Cita: ${this.labelEstado(estado)}`);
-        this.recargar();
-      },
-      error: (e) => this.alert.error(e.error?.mensaje || 'No se pudo cambiar el estado'),
-    });
+    const run = () =>
+      this.service.cambiarEstado(c.id_cita, estado).subscribe({
+        next: (res: any) => {
+          const body = res?.data || res || {};
+          modal.close();
+          this.alert.success(
+            body?.message || `Cita: ${this.labelEstado(estado)}`,
+          );
+          this.recargar();
+        },
+        error: (e) => this.alert.error(e.error?.mensaje || 'No se pudo cambiar el estado'),
+      });
+    if (estado === 'NO_ASISTIO') {
+      this.alert
+        .confirmAction(
+          '¿Paciente no asistió?',
+          'Si la cita estaba ligada a una sesión del plan, esa sesión quedará libre para reprogramar.',
+          'Sí, marcar',
+        )
+        .then((ok) => {
+          if (ok) run();
+        });
+      return;
+    }
+    run();
   }
 
   payloadForm() {
@@ -1053,6 +1146,7 @@ export class AgendaComponent implements OnInit {
           .map((x: any) => Number(x))
           .filter((n: number) => Number.isFinite(n) && n > 0)
       : [];
+    const idPlan = this.planAceptadoId();
     return {
       id_sede: Number(raw.id_sede),
       id_tipo_cita: Number(raw.id_tipo_cita),
@@ -1062,10 +1156,33 @@ export class AgendaComponent implements OnInit {
       ids_tratamiento: ids,
       id_sala: null,
       id_equipo: null,
+      id_hd_paquete: idPlan || null,
       fecha_cita: raw.fecha_cita,
       hora_inicio: raw.hora_inicio?.length === 5 ? raw.hora_inicio + ':00' : raw.hora_inicio,
       notas: raw.notas || null,
     };
+  }
+
+  /** Aviso informativo; 403/error ? sin toast ni bloqueo del guardado. */
+  cargarPlanesPendientes(idPaciente: number) {
+    this.planesPendientes.set([]);
+    if (!this.esSorela() || !idPaciente) return;
+    this.hdApi.sesionesPendientes(idPaciente).subscribe({
+      next: (res: any) => {
+        const body = res?.data?.planes ? res.data : res?.data?.data || res?.data || res;
+        this.planesPendientes.set(Array.isArray(body?.planes) ? body.planes : []);
+      },
+      error: () => this.planesPendientes.set([]),
+    });
+  }
+
+  /** Interruptor de formulario: solo afecta el payload al guardar (create). */
+  ligarPlanPendiente(p: any) {
+    this.planAceptadoId.set(Number(p.id_hd_paquete));
+  }
+
+  quitarVinculoPlan() {
+    this.planAceptadoId.set(null);
   }
 
   limpiarFormularioCita() {
@@ -1090,8 +1207,15 @@ export class AgendaComponent implements OnInit {
     this.idsTratamientoSel.set([]);
     this.horaInicioSel.set('09:00');
     this.validacion.set(null);
-    this.sugerencia.set(null);
+    this.ponerSugerencia(null);
     this.paquetes.set([]);
+    this.planesPendientes.set([]);
+    this.planAceptadoId.set(null);
+  }
+
+  private ponerSugerencia(hora: string | null) {
+    this.sugerencia.set(hora);
+    this.sugerenciaAceptada.set(false);
   }
 
   validar() {
@@ -1100,7 +1224,7 @@ export class AgendaComponent implements OnInit {
       return;
     }
     this.alert.showLoading('Validando...');
-    this.sugerencia.set(null);
+    this.ponerSugerencia(null);
     this.service.validar(this.payloadForm()).subscribe({
       next: (res: any) => {
         this.alert.closeLoading();
@@ -1110,7 +1234,7 @@ export class AgendaComponent implements OnInit {
           this.service.sugerirHorario(this.payloadForm()).subscribe({
             next: (s: any) => {
               const sug = s.data || s;
-              if (sug.encontrado) this.sugerencia.set(sug.hora_inicio);
+              this.ponerSugerencia(sug.encontrado ? sug.hora_inicio : null);
             },
           });
         }
@@ -1155,8 +1279,7 @@ export class AgendaComponent implements OnInit {
           this.service.sugerirHorario(this.payloadForm()).subscribe({
             next: (s: any) => {
               const sug = s.data || s;
-              if (sug.encontrado) this.sugerencia.set(sug.hora_inicio);
-              else this.sugerencia.set(null);
+              this.ponerSugerencia(sug.encontrado ? sug.hora_inicio : null);
             },
           });
         } else {
@@ -1166,11 +1289,17 @@ export class AgendaComponent implements OnInit {
     });
   }
 
-  usarSugerencia() {
+  aceptarSugerencia() {
     const h = this.sugerencia();
     if (!h) return;
-    this.form.patchValue({ hora_inicio: String(h).slice(0, 5) });
-    this.agendar();
+    const hora = String(h).slice(0, 5);
+    this.form.patchValue({ hora_inicio: hora });
+    this.horaInicioSel.set(hora);
+    this.sugerenciaAceptada.set(true);
+  }
+
+  cancelarSugerencia() {
+    this.ponerSugerencia(null);
   }
 
   agregarEspera() {
@@ -1216,7 +1345,7 @@ export class AgendaComponent implements OnInit {
     modal.dismiss();
     this.editingCitaId.set(Number(c.id_cita));
     this.validacion.set(null);
-    this.sugerencia.set(null);
+    this.ponerSugerencia(null);
 
     const tipo =
       this.tiposCita().find((t) => Number(t.id_tipo_cita) === Number(c.id_tipo_cita)) || null;
@@ -1302,8 +1431,34 @@ export class AgendaComponent implements OnInit {
     });
   }
 
+  esSorela(): boolean {
+    const codigo = this.unidad.membresias().find((m) => m.id_unidad === this.unidad.idUnidad())?.codigo;
+    return String(codigo || '').toUpperCase() === 'SORELA';
+  }
+
   atenderCita(modal: any) {
-    this.irACitaClinica(modal);
+    if (this.citaDetalle()?.estado === 'FINALIZADA') {
+      this.alert.warning('Esta cita ya está finalizada.');
+      return;
+    }
+    if (!this.esSorela()) {
+      this.irACitaClinica(modal);
+      return;
+    }
+    const c = this.citaDetalle();
+    if (!c?.id_cita) return;
+    const abrir = () => {
+      modal.dismiss();
+      this.router.navigate(['/citas', c.id_cita, 'atencion']);
+    };
+    if (this.puedeIniciar(c) && this.perms.hasPermission('actualizar_cita')) {
+      this.service.cambiarEstado(c.id_cita, 'EN_ATENCION').subscribe({
+        next: () => abrir(),
+        error: () => abrir(),
+      });
+      return;
+    }
+    abrir();
   }
 
   copiarTelefono(tel: string) {
@@ -1327,17 +1482,52 @@ export class AgendaComponent implements OnInit {
     });
   }
 
-  labelPaciente = (p: any) =>
-    p
-      ? `${p.apellidos || ''} ${p.nombres || ''}`.trim() +
-        (p.numero_documento ? ` · ${p.numero_documento}` : '')
-      : '';
+  labelPaciente = (p: any) => {
+    if (!p) return '';
+    const nom = `${p.apellidos || ''}, ${p.nombres || ''}`.replace(/^,\s*/, '').trim();
+    const doc = p.numero_documento ? ` · ${p.tipo_documento || 'DNI'} ${p.numero_documento}` : '';
+    return `${nom}${doc}`;
+  };
+
+  /** Filtra por nombre, apellido o DNI (ng-select busca solo bindLabel por defecto). */
+  filtrarPaciente = (term: string, item: any): boolean => {
+    const q = this.normalizarTexto(term);
+    if (!q) return true;
+    const hay = this.normalizarTexto(
+      [item?.label, item?.nombres, item?.apellidos, item?.numero_documento].filter(Boolean).join(' '),
+    );
+    return hay.includes(q);
+  };
 
   labelPersonal = (p: any) =>
     p
       ? `${p.apellidos || ''} ${p.nombres || ''}`.trim() +
         (p.especialidad ? ` · ${p.especialidad}` : '')
       : '';
+
+  private mapPacientes(list: any[]) {
+    return (list || []).map((p: any) => ({ ...p, label: this.labelPaciente(p) }));
+  }
+
+  private normalizarTexto(v: unknown): string {
+    return String(v || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
+
+  private asegurarPacienteEnLista(id: number) {
+    if (!id || this.pacientes().some((p) => Number(p.id_paciente) === id)) return;
+    this.pacientesService.findOne(id).subscribe({
+      next: (res: any) => {
+        const p = res?.data?.data || res?.data || res;
+        if (!p?.id_paciente) return;
+        this.pacientes.update((list) => [{ ...p, label: this.labelPaciente(p) }, ...list]);
+      },
+      error: () => undefined,
+    });
+  }
 
   trackCita = (_: number, c: any) => c.id_cita;
 

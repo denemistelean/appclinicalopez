@@ -231,10 +231,11 @@
           <div class="hc-section-head"><h5>Plan</h5></div>
           <h6 class="hc-block-title">Tratamiento</h6>
           <label class="form-label">Medicamento</label>
-          <ng-select class="ng-select-sm mb-2" [items]="medOptions()" bindLabel="nombre"
+          <ng-select #medBusca class="ng-select-sm mb-2" [items]="medOptions()" bindLabel="nombre"
                      placeholder="Escribir nombre del medicamento..." appendTo="body" [searchable]="true"
                      [typeahead]="medTypeahead$" [minTermLength]="2"
-                     (change)="onMedSelect($event)"></ng-select>
+                     [addTag]="crearMedicamentoTag" addTagText="Agregar medicamento"
+                     (change)="onMedSelect($event, medBusca)"></ng-select>
           <div class="d-flex justify-content-end mb-2">
             <button type="button" class="btn btn-outline-primary btn-sm" (click)="agregarMedicamento()">
               + Agregar tratamiento

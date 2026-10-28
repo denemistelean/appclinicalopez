@@ -57,6 +57,10 @@ export class HistoriaClinicaService {
     return this.http.get(`${this.apiUrl}/medicamentos`, { params });
   }
 
+  crearMedicamento(nombre: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/medicamentos`, { nombre });
+  }
+
   historialPaciente(idPaciente: number): Observable<any> {
     return this.findAll(1, 50, '', { id_paciente: idPaciente });
   }

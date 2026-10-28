@@ -67,7 +67,7 @@ export class DocumentosController {
   @RequirePermissions('DOCUMENTOS', 'ver_documento')
   @Get('config/raiz')
   raiz() {
-    return { documentos_root: this.service.getRoot() };
+    return { disponible: true };
   }
 
   @RequirePermissions('DOCUMENTOS', 'ver_documento')
